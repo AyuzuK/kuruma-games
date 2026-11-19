@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <!-- スマホやタブレットでもちょうどいい大きさで表示するための設定 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>はたらくくるま れんしゅう</title>
+  <title>しょべるかー</title>
 
   <style>
     /* ===== 画面全体 ===== */
@@ -18,7 +18,7 @@
       height: 100vh;                 /* 古いブラウザ用 */
       height: 100dvh;                /* アドレスバーの出し入れに合わせた高さ */
       overflow: hidden;              /* はみ出してもスクロールバーを出さない */
-      background: #bfe9ff;           /* 空の色 */
+      background: #d8f0ff;           /* 空の色（背景の絵が出るまでの、念のための色） */
       font-family: sans-serif;
       -webkit-user-select: none;     /* 連打しても文字が選択されないように（Safari用） */
       user-select: none;
@@ -32,13 +32,127 @@
       font-size: clamp(20px, 6vw, 32px); /* 画面がせまいときは文字を少し小さく（20〜32px） */
       padding: 0 80px;               /* 右上の音ボタンと重ならないように、左右をあける */
       font-weight: bold;
-      color: #333;
+      /* 端末に入っている、丸みのある書体を先に試す（なければ ふつうの書体）。外から読み込まない */
+      font-family: "Hiragino Maru Gothic ProN", "BIZ UDPGothic", system-ui, sans-serif;
+      color: #5a3d1e;                /* こげ茶（車の線と同じ色） */
+      /* 白いふちどり：白い影を上下左右ななめに少しずつずらして重ねる */
+      text-shadow:
+        3px 0 0 #fff, -3px 0 0 #fff, 0 3px 0 #fff, 0 -3px 0 #fff,
+        2px 2px 0 #fff, -2px 2px 0 #fff, 2px -2px 0 #fff, -2px -2px 0 #fff,
+        0 0 6px #fff;
       margin-top: 30px;
       position: relative;            /* z-index を効かせるために必要 */
       z-index: 1;                    /* 車や地面と重なっても、文字を手前に出す */
     }
 
-    /* 地面 */
+    /* =====================================================
+       背景（2つの層）
+         .scenery … 上 75%：空・太陽・雲・丘・茂み・木・草地・土の山
+         .ground  … 下 25%：土と小石（ショベルカーはこの上のふちを走る）
+       ===================================================== */
+    .scenery {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      /* 地面の層と 2px 重ねる（画面の高さが端数のとき、境目に 1px のすき間が出ないように）。
+         重なった 2px は、あとに書いてある地面の層の下にかくれる */
+      height: calc(75vh + 2px);
+      height: calc(75dvh + 2px);
+      overflow: hidden;              /* 雲などのはみ出しを切る */
+      /* 丘の絵の高さ。横幅の 1/3 か、この層の高さの 42% の、大きいほう（ただし 92% まで）。
+         こうすると、丘の絵はいつも「高さ」に合わせて縮むので、木の根もとの高さを % で合わせられる */
+      --hills: min(max(33.4vw, 42%), 92%);
+      /* 太陽（右上。輪郭なしで、ふんわりにじむだけ）と、空のグラデーション（上が濃く、下がうすい） */
+      background:
+        radial-gradient(circle 20vmin at 80% 13%,
+          #fff6c8 0%, rgba(255, 246, 200, 0.85) 30%, rgba(255, 246, 200, 0) 100%),
+        linear-gradient(#8ccbf0 0%, #d8f0ff 100%);
+    }
+
+    /* 縦長の画面（スマホ縦・タブレット縦）では、丘を高めにして、上半分が空だけにならないようにする。
+       木は .trees の「26vw まで」の上限があるので、大きくなりすぎない */
+    @media (orientation: portrait) {
+      .scenery { --hills: min(max(33.4vw, 56%), 92%); }
+    }
+
+    /* 雲：画面2つぶんの横長の帯に、同じ並びを2回くり返して置き、とてもゆっくり左へ流す。
+       帯の半分（= 画面1つぶん）動いたところで最初に戻るので、つなぎ目が見えない。
+       雲の帯は、上から 84px より下に置く。上の文字（上から 30〜75px くらい）と、
+       右上の音を消すボタン（上から 12〜76px）の後ろを、雲が流れて通らないようにするため。
+       帯の高さは「空の層の高さ − 84px − 丘の高さの 6割」（丘の上のほうまで雲を散らす）。
+       雲は帯の中の % で置くので、画面の縦横が変わっても、帯の中におさまる */
+    .clouds {
+      position: absolute;
+      left: 0;
+      top: 84px;
+      width: 200%;
+      height: max(60px, calc(100% - 84px - var(--hills) * 0.6));
+      animation: kumo 160s linear infinite; /* 1周 160秒 */
+    }
+    @keyframes kumo {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+    .cloud {
+      position: absolute;
+      display: block;
+      height: auto;
+      aspect-ratio: 120 / 56;
+    }
+    .cloud-l { width: clamp(100px, 13vw, 200px); }
+    .cloud-m { width: clamp(80px, 10vw, 150px); }
+    .cloud-s { width: clamp(60px, 7vw, 110px); }
+
+    /* 低い雲：縦長の画面だけに出す（空が広いので、少し下にも雲を散らす） */
+    .cloud-low { display: none; }
+    @media (orientation: portrait) {
+      .cloud-low { display: block; }
+    }
+
+    /* 高さの低い画面（スマホ横向きなど）：空がせまいので、雲を小さく・少なくする */
+    @media (max-height: 500px) {
+      .cloud-l { width: 76px; }
+      .cloud-m { width: 60px; }
+      .cloud-s { display: none; }
+    }
+
+    /* 丘・茂み・草地（下のはしを、地面の上のふちにぴったり合わせる） */
+    .hills {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: var(--hills);
+      display: block;
+    }
+
+    /* 木（左右に2本ずつ）。画面のはしに合わせて置くので、どの画面でも左右に見える。
+       根もとは、丘の絵の草地のおくのふち（丘の絵の高さの 20% のところ）に合わせる */
+    .trees {
+      position: absolute;
+      bottom: calc(var(--hills) * 0.2);
+      height: min(calc(var(--hills) * 0.6), 26vw); /* スマホ縦向きで大きくなりすぎないように */
+      width: auto;
+      aspect-ratio: 200 / 160;
+      display: block;
+    }
+    .trees-left  { left: -1vw; }
+    .trees-right { right: -1vw; }
+
+    /* 土の山：まん中より少し右の奥。大きさはショベルカーの高さの 4割くらい（半分以下） */
+    .mound {
+      position: absolute;
+      left: 54%;
+      bottom: 0;
+      /* ショベルカーの高さ（220px × 縮小率 0.5〜1）の 0.4 倍 */
+      height: max(44px, min(88px, 14.6vw, 17.6vh));
+      width: auto;
+      aspect-ratio: 200 / 100;
+      display: block;
+    }
+
+    /* 地面（下 25%） */
     .ground {
       position: absolute;
       left: 0;
@@ -46,8 +160,36 @@
       bottom: 0;
       height: 25vh;
       height: 25dvh;
-      background: #c8a165;           /* 土の色 */
-      border-top: 8px solid #7cc254; /* 草の色 */
+      background: #c48d5c;           /* 土の色 */
+      overflow: hidden;
+    }
+    .ground-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* 手前の草の株（左下・下のまん中・右下）。ショベルカーより奥に描く */
+    .tuft {
+      position: absolute;
+      bottom: 3%;
+      height: clamp(24px, 6vh, 46px);
+      width: auto;
+      aspect-ratio: 60 / 40;
+      display: block;
+    }
+    .tuft-left   { left: 3%; }
+    .tuft-center { left: 46%; }
+    .tuft-right  { right: 3%; }
+
+    /* 木・雲・草の株の形を1か所に書いておくための、見えない SVG */
+    .svg-defs {
+      position: absolute;
+      width: 0;
+      height: 0;
+      overflow: hidden;
     }
 
     /* ===== ショベルカー全体 =====
@@ -55,14 +197,16 @@
          .shovel        … 左右の「位置」を受け持つ（右に動く）
          .shovel-size   … 「大きさ」を受け持つ（小さい画面では縮める）
          .shovel-wobble … 「ぷるぷる」を受け持つ（待っているあいだ揺れる）
-       1つの箱で全部やろうとすると、動きどうしがぶつかるためです。 */
+       1つの箱で全部やろうとすると、動きどうしがぶつかるためです。
+       （次の工程の「指マーク」は、.shovel の中で .shovel-wobble の外に置く予定。
+         そうすると車といっしょに左右に動き、ぷるぷるの揺れは受けない） */
     .shovel {
       position: absolute;
       left: 0;
       bottom: 25vh;
       bottom: 25dvh;                 /* 地面の上に乗せる */
-      width: 260px;
-      height: 200px;
+      width: 300px;                  /* JavaScript の CAR_WIDTH と同じにする */
+      height: 220px;
       /* 動く速さ（transition）は、距離に合わせて JavaScript の moveTo で決めています */
     }
 
@@ -80,6 +224,17 @@
       transform-origin: center bottom;
     }
 
+    /* ショベルカーの絵（SVG）。アームが動いて枠の外に出ても切れないように overflow: visible */
+    .shovel-svg {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 300px;
+      height: 220px;
+      overflow: visible;
+      display: block;
+    }
+
     /* 待っているあいだ（.waiting が付いているあいだ）だけ、ぷるぷる揺らす */
     .shovel.waiting .shovel-wobble {
       animation: purupuru 0.5s ease-in-out infinite;
@@ -93,154 +248,69 @@
       100% { transform: translateY(0)    rotate(0deg); }
     }
 
-    /* キャタピラ（足回り） */
-    .track {
-      position: absolute;
-      left: 10px;
-      bottom: 0;
-      width: 180px;
-      height: 45px;
-      background: #444;
-      border-radius: 25px;           /* 角を丸くしてカプセル形に */
+    /* ===== SVG の部品を回すときの決まり =====
+       回したい部品は、まず「関節（回る中心）の場所へ translate で移した <g>」の中に入れ、
+       その中で、関節が (0, 0) になるように描いてあります。
+       そのうえで、中の <g> を回すと、(0, 0) = 関節を中心に回ります。
+       （iPhone の Safari で回る中心がずれないように、transform-origin の計算にたよらない方法） */
+    .spin,
+    .boom-rot,
+    .stick-rot,
+    .bucket-rot {
+      transform-origin: 0 0;         /* SVG ではもともと 0 0。念のため書いておく */
     }
 
-    /* キャタピラの中の車輪（丸） */
-    .wheel {
-      position: absolute;
-      bottom: 8px;
-      width: 30px;
-      height: 30px;
-      background: #999;
-      border: 4px solid #222;
-      border-radius: 50%;            /* 50% にすると丸になる */
-      box-sizing: border-box;
-    }
-    .wheel1 { left: 20px; }
-    .wheel2 { left: 75px; }
-    .wheel3 { left: 130px; }
-
-    /* 車体（黄色い四角） */
-    .body {
-      position: absolute;
-      left: 20px;
-      bottom: 45px;
-      width: 160px;
-      height: 55px;
-      background: #ffc400;
-      border: 4px solid #333;
-      border-radius: 8px;
-      box-sizing: border-box;
-    }
-
-    /* 運転席 */
-    .cab {
-      position: absolute;
-      left: 30px;
-      bottom: 96px;
-      width: 75px;
-      height: 70px;
-      background: #ffc400;
-      border: 4px solid #333;
-      border-radius: 10px 10px 0 0;
-      box-sizing: border-box;
-    }
-
-    /* 運転席の窓 */
-    .window {
-      position: absolute;
-      left: 12px;
-      top: 10px;
-      width: 45px;
-      height: 32px;
-      background: #8fd3ff;
-      border: 3px solid #333;
-      border-radius: 6px;
-      box-sizing: border-box;
-    }
-
-    /* アーム（腕）：ななめに傾けた細長い四角 */
-    .arm {
-      position: absolute;
-      left: 140px;
-      bottom: 110px;
-      width: 100px;
-      height: 22px;
-      background: #ffc400;
-      border: 4px solid #333;
-      border-radius: 10px;
-      box-sizing: border-box;
-      transform-origin: left center; /* 左はしを支点にして回す */
-      transform: rotate(-25deg);
-    }
-
-    /* 先っぽのアーム（下向き） */
-    .arm2 {
-      position: absolute;
-      left: 218px;
-      bottom: 70px;
-      width: 22px;
-      height: 90px;
-      background: #ffc400;
-      border: 4px solid #333;
-      border-radius: 10px;
-      box-sizing: border-box;
-    }
-
-    /* バケット（土をすくう部分） */
-    .bucket {
-      position: absolute;
-      left: 205px;
-      bottom: 40px;
-      width: 50px;
-      height: 40px;
-      background: #777;
-      border: 4px solid #333;
-      border-radius: 0 0 25px 25px;  /* 下だけ丸くしてお椀の形に */
-      box-sizing: border-box;
-    }
-
-    /* ===== 車輪が回る ===== */
-    /* 車輪の中の十字の線（スポーク）。これがあると、回っているのが目で見てわかる */
-    .wheel::before,
-    .wheel::after {
-      content: "";
-      position: absolute;
-      left: 50%;
-      top: 1px;
-      bottom: 1px;
-      width: 3px;
-      margin-left: -1.5px;
-      background: #222;
-    }
-    .wheel::after {
-      transform: rotate(90deg);      /* 2本目は横向きにして十字にする */
-    }
-
-    /* 車が動いているあいだ（.moving が付いているあいだ）だけ、車輪を回す */
-    .shovel.moving .wheel {
+    /* ===== 車輪とローラーが回る（動いているあいだ .moving が付く） ===== */
+    .shovel.moving .spin {
       animation: kururu 0.5s linear infinite;
+    }
+    .shovel.moving .spin-fast {
+      animation-duration: 0.3s;      /* 小さいローラーは速めに回す */
     }
     @keyframes kururu {
       from { transform: rotate(0deg); }
       to   { transform: rotate(360deg); }
     }
 
-    /* ===== アームが動く ===== */
-    /* アーム・先っぽのアーム・バケットをひとまとめにした箱。
-       アームのつけね（左から140px、上から79px）を支点にして回す */
-    .arm-group {
-      position: absolute;
-      inset: 0;
-      transform-origin: 140px 79px;
+    /* キャタピラのでこぼこ：点線のずらし位置を動かして、流れるように見せる。
+       1つぶん（でこぼこ 6 ＋ すき間 6 = 12）動いたら最初に戻るので、つなぎ目が見えない */
+    .shovel.moving .tread {
+      animation: gotogoto 0.25s linear infinite;
     }
-    /* .scoop が付いたら、1回だけ「ガシャン」と下がって戻る */
-    .arm-group.scoop {
-      animation: gashan 0.5s ease-in-out;
+    @keyframes gotogoto {
+      from { stroke-dashoffset: 0; }
+      to   { stroke-dashoffset: -12; }
     }
-    @keyframes gashan {
+
+    /* ===== アームが動く「ガシャン」 =====
+       #armGroup に .scoop が付いたら、関節ごとに1回だけ動いて戻る（0.5秒）。
+       40%（= 0.2秒）で下がりきる。音の「ガシャン」もここで鳴る。
+       入れ子なので角度は足し算になる（バケットは合わせて 9 + 11 + 18 = 38度）。
+       アニメーションが終わると、もとの形（0度）に戻る */
+    #armGroup.scoop .boom-rot   { animation: boomGashan   0.5s ease-in-out; }
+    #armGroup.scoop .stick-rot  { animation: stickGashan  0.5s ease-in-out; }
+    #armGroup.scoop .bucket-rot { animation: bucketGashan 0.5s ease-in-out; }
+    @keyframes boomGashan {
       0%   { transform: rotate(0deg); }
-      40%  { transform: rotate(20deg); }  /* 下がりきったところ（ここで「ガシャン」の音） */
+      40%  { transform: rotate(9deg); }   /* ブームが少し下がる */
       100% { transform: rotate(0deg); }
+    }
+    @keyframes stickGashan {
+      0%   { transform: rotate(0deg); }
+      40%  { transform: rotate(11deg); }  /* スティックが手前に引かれる */
+      100% { transform: rotate(0deg); }
+    }
+    @keyframes bucketGashan {
+      0%   { transform: rotate(0deg); }
+      40%  { transform: rotate(18deg); }  /* バケットがくるっと土をすくう */
+      55%  { transform: rotate(18deg); }  /* 少しだけ止まって「すくった」感じを出す */
+      100% { transform: rotate(0deg); }
+    }
+
+    /* ===== 動きを減らす設定の端末では、ぷるぷると雲の流れを止める ===== */
+    @media (prefers-reduced-motion: reduce) {
+      .shovel.waiting .shovel-wobble { animation: none; }
+      .clouds { animation: none; }
     }
 
     /* ===== 音を消すボタン（右上） ===== */
@@ -279,39 +349,443 @@
 </head>
 <body>
 
+  <!-- 木・雲・草の株の形（ここに1回だけ書いて、<use> で何回も使う）。この SVG 自体は見えない -->
+  <svg class="svg-defs" aria-hidden="true" focusable="false">
+    <defs>
+      <!-- 木1本。根もとが (0, 0)、上に向かって y がマイナスになる -->
+      <g id="tree">
+        <!-- ふちどり：葉の丸を少し大きくして、こげ茶で先に塗っておく（外側だけが線に見える） -->
+        <g fill="#5a3d1e">
+          <circle cx="-20" cy="-88" r="28"/>
+          <circle cx="20" cy="-90" r="28"/>
+          <circle cx="0" cy="-82" r="26"/>
+          <circle cx="0" cy="-122" r="32"/>
+        </g>
+        <!-- 葉の下側の影 -->
+        <g fill="#74963a">
+          <circle cx="-20" cy="-88" r="26"/>
+          <circle cx="20" cy="-90" r="26"/>
+          <circle cx="0" cy="-82" r="24"/>
+        </g>
+        <!-- 葉（丸いかたまりを重ねる） -->
+        <g fill="#8fb34a">
+          <circle cx="-20" cy="-98" r="24"/>
+          <circle cx="20" cy="-100" r="24"/>
+          <circle cx="0" cy="-100" r="24"/>
+          <circle cx="0" cy="-122" r="30"/>
+        </g>
+        <!-- 明るいところ（太陽のある右上） -->
+        <g fill="#b5c95a">
+          <circle cx="10" cy="-134" r="12"/>
+          <circle cx="28" cy="-110" r="8"/>
+        </g>
+        <!-- 幹（Y字に枝分かれ） -->
+        <path d="M -6 0 L -4 -50 L -18 -74 L -13 -77 L -1 -62 L 0 -86 L 5 -86 L 5 -64 L 17 -80 L 22 -77 L 8 -52 L 8 0 Z"
+              fill="#8a5a3c" stroke="#5a3d1e" stroke-width="2" stroke-linejoin="round"/>
+      </g>
+
+      <!-- 雲（もこもこ）。下にうすい青の影、その上に白 -->
+      <g id="cloud">
+        <path fill="#dcebf7"
+              d="M 14 52 Q 2 52 4 42 Q 6 32 18 34 Q 20 18 38 20 Q 46 8 62 12 Q 76 6 84 20 Q 100 16 104 30 Q 118 32 116 44 Q 114 54 102 54 Z"/>
+        <path fill="#ffffff"
+              d="M 14 47 Q 2 47 4 37 Q 6 27 18 29 Q 20 13 38 15 Q 46 3 62 7 Q 76 1 84 15 Q 100 11 104 25 Q 118 27 116 39 Q 114 48 102 48 Z"/>
+      </g>
+
+      <!-- 手前の草の株（ギザギザ）。地面の層の左下・下のまん中・右下で使う。
+           使う場所より前に書いておく（iPhone などで、最初の表示が不安定にならないように） -->
+      <g id="tuftShape" stroke="#5a3d1e" stroke-width="2" stroke-linejoin="round">
+        <path fill="#86bd52" d="M 4 40 Q 10 24 6 8 Q 16 22 18 40 Z"/>
+        <path fill="#86bd52" d="M 36 40 Q 48 26 58 20 Q 50 32 50 40 Z"/>
+        <path fill="#a8d465" d="M 14 40 Q 22 18 22 2 Q 30 20 30 40 Z"/>
+        <path fill="#a8d465" d="M 26 40 Q 36 16 46 10 Q 40 26 40 40 Z"/>
+      </g>
+    </defs>
+  </svg>
+
+  <!-- ===== 背景1：空と景色（上 75%） ===== -->
+  <div class="scenery" aria-hidden="true">
+
+    <!-- 雲（左半分と右半分に、同じ並びで置く）。top は、雲の帯（上から 84px より下）の中での位置。
+         cloud-low は、縦長の画面だけに出す低い雲 -->
+    <div class="clouds">
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 2%; top: 6%;"><use href="#cloud"/></svg>
+      <svg class="cloud cloud-m cloud-low" viewBox="0 0 120 56" style="left: 8%; top: 78%;"><use href="#cloud"/></svg>
+      <svg class="cloud cloud-s" viewBox="0 0 120 56" style="left: 14%; top: 44%;"><use href="#cloud"/></svg>
+      <svg class="cloud cloud-m" viewBox="0 0 120 56" style="left: 24%; top: 26%;"><use href="#cloud"/></svg>
+      <svg class="cloud cloud-s cloud-low" viewBox="0 0 120 56" style="left: 31%; top: 70%;"><use href="#cloud"/></svg>
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 37%; top: 0%;"><use href="#cloud"/></svg>
+
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 52%; top: 6%;"><use href="#cloud"/></svg>
+      <svg class="cloud cloud-m cloud-low" viewBox="0 0 120 56" style="left: 58%; top: 78%;"><use href="#cloud"/></svg>
+      <svg class="cloud cloud-s" viewBox="0 0 120 56" style="left: 64%; top: 44%;"><use href="#cloud"/></svg>
+      <svg class="cloud cloud-m" viewBox="0 0 120 56" style="left: 74%; top: 26%;"><use href="#cloud"/></svg>
+      <svg class="cloud cloud-s cloud-low" viewBox="0 0 120 56" style="left: 81%; top: 70%;"><use href="#cloud"/></svg>
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 87%; top: 0%;"><use href="#cloud"/></svg>
+    </div>
+
+    <!-- 丘・茂み・草地・花。横長の絵を、画面いっぱいに広げて、はみ出た左右は切る（slice） -->
+    <svg class="hills" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMax slice">
+      <!-- 遠くの丘 -->
+      <path fill="#a9d98b"
+            d="M 0 250 C 120 190 240 180 360 215 C 470 245 560 230 650 190 C 760 140 880 130 990 175 C 1080 210 1140 190 1200 170 L 1200 400 L 0 400 Z"/>
+      <!-- 丘のふもとの茂み（左・まん中・右） -->
+      <g fill="#7fbf5a" stroke="#5a3d1e" stroke-width="2" stroke-linejoin="round" opacity="0.95">
+        <path d="M -10 300 C -6 272 24 262 46 272 C 58 250 94 248 108 266 C 124 250 158 252 168 272 C 186 262 214 268 222 288 C 242 280 268 290 272 306 L 272 340 L -10 340 Z"/>
+        <path d="M 560 318 C 565 300 590 296 602 306 C 614 292 640 294 646 308 C 660 302 680 308 682 320 L 682 340 L 560 340 Z"/>
+        <path d="M 820 312 C 826 290 852 284 868 294 C 880 272 915 270 930 288 C 945 270 985 272 992 292 C 1010 280 1040 284 1046 300 C 1065 286 1100 290 1105 304 C 1125 290 1165 292 1172 310 C 1185 300 1210 302 1210 304 L 1210 340 L 820 340 Z"/>
+      </g>
+      <!-- 手前の草地（黄みのある明るい黄緑） -->
+      <path fill="#a8d465"
+            d="M 0 320 C 200 300 420 312 600 316 C 800 320 1000 306 1200 312 L 1200 400 L 0 400 Z"/>
+      <!-- 草地を横切る、うすい茶色の小道 -->
+      <path fill="#c48d5c" opacity="0.4"
+            d="M 640 320 C 760 332 900 338 1200 330 L 1200 344 C 900 354 760 348 640 324 Z"/>
+      <!-- 草地の濃いところ -->
+      <g fill="#86bd52" opacity="0.55">
+        <ellipse cx="250" cy="348" rx="130" ry="8"/>
+        <ellipse cx="860" cy="366" rx="160" ry="9"/>
+        <ellipse cx="520" cy="378" rx="90" ry="6"/>
+      </g>
+      <!-- 草のすじ（小さな「V」の形） -->
+      <g fill="none" stroke="#86bd52" stroke-width="3" stroke-linecap="round">
+        <path d="M 120 372 l 4 -10 M 126 372 l -2 -12 M 132 372 l 3 -9"/>
+        <path d="M 420 352 l 4 -10 M 426 352 l -2 -12 M 432 352 l 3 -9"/>
+        <path d="M 700 384 l 4 -10 M 706 384 l -2 -12 M 712 384 l 3 -9"/>
+        <path d="M 1010 352 l 4 -10 M 1016 352 l -2 -12 M 1022 352 l 3 -9"/>
+        <path d="M 330 388 l 4 -10 M 336 388 l -2 -12"/>
+        <path d="M 1120 384 l 4 -10 M 1126 384 l -2 -12"/>
+      </g>
+      <!-- 小さな花（黄・白・ピンク）を少しだけ -->
+      <g>
+        <circle cx="80" cy="356" r="4.5" fill="#f5d34a"/>
+        <circle cx="96" cy="364" r="4" fill="#ffffff"/>
+        <circle cx="300" cy="372" r="4" fill="#f2a7b8"/>
+        <circle cx="470" cy="340" r="4" fill="#ffffff"/>
+        <circle cx="486" cy="346" r="4.5" fill="#f5d34a"/>
+        <circle cx="760" cy="376" r="4" fill="#f2a7b8"/>
+        <circle cx="940" cy="384" r="4.5" fill="#f5d34a"/>
+        <circle cx="956" cy="378" r="4" fill="#ffffff"/>
+        <circle cx="1090" cy="360" r="4" fill="#f2a7b8"/>
+        <circle cx="1150" cy="372" r="4.5" fill="#f5d34a"/>
+      </g>
+      <!-- 草地の手前のふち（地面との境目） -->
+      <path fill="#86bd52"
+            d="M 0 393 C 300 389 600 395 900 390 C 1000 388 1100 392 1200 391 L 1200 400 L 0 400 Z"/>
+    </svg>
+
+    <!-- 木：左（はしに大きい木、内側に少し小さい木） -->
+    <svg class="trees trees-left" viewBox="0 0 200 160">
+      <use href="#tree" transform="translate(150 158) scale(0.72)"/>
+      <use href="#tree" transform="translate(60 158)"/>
+    </svg>
+    <!-- 木：右（内側に少し小さい木、はしに大きい木） -->
+    <svg class="trees trees-right" viewBox="0 0 200 160">
+      <use href="#tree" transform="translate(50 158) scale(0.72)"/>
+      <use href="#tree" transform="translate(140 158)"/>
+    </svg>
+
+    <!-- 土の山（まん中より少し右の奥。ショベルカーより奥） -->
+    <svg class="mound" viewBox="0 0 200 100">
+      <path d="M 4 98 C 10 80 30 72 50 58 C 70 40 85 12 110 10 C 135 8 150 40 168 62 C 182 78 196 86 198 98 Z"
+            fill="#a9744a" stroke="#5a3d1e" stroke-width="2" stroke-linejoin="round"/>
+      <!-- 明るいところ（てっぺんの右がわ） -->
+      <path d="M 74 48 C 88 24 100 16 112 16 C 128 16 140 38 150 56 C 130 50 104 52 74 48 Z" fill="#c28a5c"/>
+      <!-- 影（すそ） -->
+      <path d="M 12 94 C 50 84 150 82 192 94 L 196 97 L 6 97 Z" fill="#8a5a38" opacity="0.7"/>
+      <!-- 土のかたまりの小さな線 -->
+      <g fill="none" stroke="#8a5a38" stroke-width="2" stroke-linecap="round">
+        <path d="M 60 70 q 8 -4 16 0"/>
+        <path d="M 120 60 q 8 -4 16 0"/>
+        <path d="M 96 80 q 8 -4 16 0"/>
+      </g>
+    </svg>
+  </div>
+
+  <!-- ===== 背景2：地面（下 25%） ===== -->
+  <div class="ground" aria-hidden="true">
+    <!-- 土の模様を、くり返し並べる（引きのばさないので、どの画面でも同じ見え方） -->
+    <svg class="ground-svg">
+      <defs>
+        <pattern id="dirt" width="240" height="110" patternUnits="userSpaceOnUse">
+          <rect width="240" height="110" fill="#c48d5c"/>
+          <!-- 土の濃いところ -->
+          <ellipse cx="60" cy="40" rx="38" ry="8" fill="#a87449" opacity="0.35"/>
+          <ellipse cx="180" cy="85" rx="46" ry="9" fill="#a87449" opacity="0.35"/>
+          <!-- 小石 -->
+          <g fill="#9c6a42">
+            <circle cx="30" cy="70" r="3.5"/>
+            <circle cx="38" cy="74" r="2.2"/>
+            <circle cx="150" cy="30" r="3"/>
+            <circle cx="210" cy="52" r="2.5"/>
+            <circle cx="95" cy="95" r="3"/>
+            <circle cx="120" cy="60" r="2"/>
+          </g>
+          <!-- 地面の短いしわの線 -->
+          <g fill="none" stroke="#a87449" stroke-width="2.5" stroke-linecap="round">
+            <path d="M 70 72 q 10 -4 20 0"/>
+            <path d="M 170 20 q 8 -3 16 0"/>
+            <path d="M 15 25 q 7 -3 14 0"/>
+          </g>
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#dirt)"/>
+      <!-- 草地との境目のすぐ下を、少し濃くする -->
+      <rect width="100%" height="7" fill="#a87449" opacity="0.45"/>
+    </svg>
+
+    <!-- 手前の草の株（左下・下のまん中・右下）。形 #tuftShape は、いちばん上の見えない SVG に書いてある -->
+    <svg class="tuft tuft-left" viewBox="0 0 60 40"><use href="#tuftShape"/></svg>
+    <svg class="tuft tuft-center" viewBox="0 0 60 40"><use href="#tuftShape"/></svg>
+    <svg class="tuft tuft-right" viewBox="0 0 60 40"><use href="#tuftShape"/></svg>
+  </div>
+
   <div class="message">さわると うごくよ！</div>
 
   <!-- 音を消すボタン（大人用。2秒長押しで切り替え） -->
   <button class="mute-btn" id="muteBtn" type="button" aria-label="おとを けす（2びょう ながおし）">🔊</button>
 
-  <div class="ground"></div>
-
-  <!-- ショベルカー本体（パーツの組み合わせ） -->
+  <!-- ===== ショベルカー本体 ===== -->
   <div class="shovel waiting" id="shovel">
     <div class="shovel-size" id="shovelSize">
       <div class="shovel-wobble">
-        <!-- アームの3つの部品は、いっしょに動くように1つの箱にまとめる -->
-        <div class="arm-group" id="armGroup">
-          <div class="arm"></div>
-          <div class="arm2"></div>
-          <div class="bucket"></div>
-        </div>
-        <div class="track">
-          <div class="wheel wheel1"></div>
-          <div class="wheel wheel2"></div>
-          <div class="wheel wheel3"></div>
-        </div>
-        <div class="body"></div>
-        <div class="cab">
-          <div class="window"></div>
-        </div>
+        <!-- ショベルカーの絵。座標の枠は 横300 × 縦220（左上が 0,0、y は下向きに増える）。
+             重なる順番（奥 → 手前）：地面の影 → 奥のキャタピラ → 旋回台 → 煙突 → アーム → 運転席・車体 → 手前のキャタピラ -->
+        <svg class="shovel-svg" viewBox="0 0 300 220" aria-hidden="true" focusable="false">
+          <defs>
+            <!-- 車体・運転席・バケットの形で切りぬいて、明るいところ・影を中だけに塗るための型 -->
+            <clipPath id="bodyClip"><rect x="15" y="112" width="130" height="48" rx="14"/></clipPath>
+            <clipPath id="cabClip"><path d="M 34 115 L 34 46 Q 34 28 52 28 L 104 28 Q 119 28 121 43 L 126 115 Z"/></clipPath>
+            <clipPath id="bucketClip"><path d="M -8 -4 L 38 -6 Q 62 10 58 34 Q 54 60 26 64 L 2 64 Q -6 64 -6 58 Q 12 28 -8 -4 Z"/></clipPath>
+            <!-- キャタピラの形（カプセル形）。まわりの長さがちょうど 300 になるように作ってある。
+                 動くでこぼこ（.tread）は、iPhone の Safari で <use> へのアニメーションが止まることがあるので、
+                 この形を使わずに、同じ d を書いた <path> を直接置いている -->
+            <path id="trackShape" d="M 35 165 L 106.46 165 A 25 25 0 0 1 106.46 215 L 35 215 A 25 25 0 0 1 35 165 Z"/>
+          </defs>
+
+          <g stroke="#5a3d1e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+
+            <!-- 地面の影（ぼんやりした横長の楕円） -->
+            <ellipse cx="92" cy="215" rx="90" ry="7" fill="#8a5a38" opacity="0.35" stroke="none"/>
+
+            <!-- ===== 奥のキャタピラ（手前より右に 22px・上に 7px ずらし、少し暗く） ===== -->
+            <g transform="translate(22 -7)">
+              <path class="tread" d="M 35 165 L 106.46 165 A 25 25 0 0 1 106.46 215 L 35 215 A 25 25 0 0 1 35 165 Z"
+                    fill="none" stroke="#2c2c2c" stroke-width="11"
+                    stroke-dasharray="6 6" stroke-linecap="butt"/>
+              <use href="#trackShape" fill="#3a3a3a" stroke="#3a2614"/>
+              <!-- 右はしの車輪（見えるのは右がわだけ） -->
+              <g transform="translate(106.46 190)">
+                <g class="spin">
+                  <circle r="18" fill="#5e5e5e" stroke="#3a2614" stroke-width="2.5"/>
+                  <circle r="7" fill="#4a4a4a" stroke="none"/>
+                  <g fill="#7a7a7a" stroke="none">
+                    <circle cx="0" cy="-11" r="2.2"/>
+                    <circle cx="9.5" cy="5.5" r="2.2"/>
+                    <circle cx="-9.5" cy="5.5" r="2.2"/>
+                  </g>
+                </g>
+              </g>
+            </g>
+
+            <!-- ===== 旋回台（車体の下の暗い台） ===== -->
+            <rect x="36" y="150" width="96" height="18" rx="5" fill="#4a4a4a"/>
+
+            <!-- ===== 煙突（煙は出さない） ===== -->
+            <!-- 運転席を大きくしたので、運転席の左どなりに置く -->
+            <rect x="20" y="92" width="9" height="24" rx="2.5" fill="#4a4a4a"/>
+            <rect x="18" y="88" width="13" height="7" rx="3.5" fill="#4a4a4a"/>
+
+            <!-- ===== アーム（ブーム > スティック > バケット の入れ子） =====
+                 それぞれ「関節の場所へ translate した <g>」の中に、回す <g> がある。
+                 回す <g> の中では、関節が (0, 0) -->
+            <g id="armGroup">
+              <!-- ブームの付け根の関節 (120, 120) -->
+              <g transform="translate(120 120)">
+                <g class="boom-rot">
+                  <!-- 油圧シリンダー2（ブームの上がわ）：折れ目の背中から、スティックの上のはしへ。
+                       ブームより先に描いて、ブームの背中から少しのぞくようにする。
+                       棒の先は、スティックの上のはしの裏に重ねる。
+                       シリンダーは、アーム（太さ 18〜24）より細い太さ 8（棒は 5） -->
+                  <line x1="26.2" y1="-91.9" x2="46.3" y2="-113.4" stroke-width="5"/>
+                  <line x1="26.2" y1="-91.9" x2="46.3" y2="-113.4" stroke="#c8ccd0" stroke-width="2.5"/>
+                  <line x1="9.8" y1="-74.4" x2="29.9" y2="-95.9" stroke-width="8"/>
+                  <line x1="9.8" y1="-74.4" x2="29.9" y2="-95.9" stroke="#4a4a4a" stroke-width="5"/>
+
+                  <!-- ブーム：付け根 (0,0) → 上に「く」の字に折れる (20,-68) → 先 (55,-100)。
+                       太さは、付け根 24 → 折れ目 22 → 先 18 と、少しずつ細くなる。
+                       折れ目の背中がわは、大きく丸めて、どっしりした形にする -->
+                  <path fill="#f7c33c"
+                        d="M 11.5 3.4 L 28 -56.2 Q 29.7 -62 34.1 -66 L 61.1 -93.4 A 9 9 0 0 0 48.9 -106.6 L 18.5 -81.5 Q 10.3 -74.1 7.2 -63.4 L -11.5 -3.4 A 12 12 0 0 0 11.5 3.4 Z"/>
+                  <!-- ブームの明るいところ（背中がわ） -->
+                  <path d="M -1.8 -14.5 L 12.4 -62 Q 14.7 -71.3 22 -77.5 L 45 -98" fill="none" stroke="#ffd96b" stroke-width="4"/>
+                  <!-- シリンダー2の付け根のピン（ブームの背中に付いている） -->
+                  <circle cx="9.8" cy="-74.4" r="3.5" fill="#ffd96b" stroke-width="2"/>
+
+                  <!-- 油圧シリンダー1（ブームの下がわ）：車体の前から、ブームの折れ目の近くへ。
+                       下のはしは車体の裏にかくれる -->
+                  <line x1="22.6" y1="-13" x2="28" y2="-50" stroke-width="5"/>
+                  <line x1="22.6" y1="-13" x2="28" y2="-50" stroke="#c8ccd0" stroke-width="2.5"/>
+                  <line x1="18" y1="18" x2="23.6" y2="-20" stroke-width="8"/>
+                  <line x1="18" y1="18" x2="23.6" y2="-20" stroke="#4a4a4a" stroke-width="5"/>
+                  <circle cx="28" cy="-50" r="3.5" fill="#ffd96b" stroke-width="2"/>
+
+                  <!-- スティックの関節（ブームの先）(55, -100) -->
+                  <g transform="translate(55 -100)">
+                    <g class="stick-rot">
+                      <!-- スティック：上のはし (-8.7,-13.4) → バケットの付け根 (55, 85)。
+                           太さは、上 19 → 下 16 と、少しずつ細くなる。両はしは丸い -->
+                      <path fill="#f7c33c"
+                            d="M -0.7 -18.6 L 61.7 80.7 A 8 8 0 0 1 48.3 89.4 L -16.7 -8.3 A 9.5 9.5 0 0 1 -0.7 -18.6 Z"/>
+                      <path d="M 3.1 -4.4 L 50.5 69.8" fill="none" stroke="#ffd96b" stroke-width="3.5"/>
+
+                      <!-- 油圧シリンダー3（スティックの外がわ）：棒の先は、バケットの付け根の裏に重ねる -->
+                      <line x1="36.2" y1="33.8" x2="64.4" y2="77.4" stroke-width="5"/>
+                      <line x1="36.2" y1="33.8" x2="64.4" y2="77.4" stroke="#c8ccd0" stroke-width="2.5"/>
+                      <line x1="15.5" y1="1.9" x2="40" y2="39.7" stroke-width="8"/>
+                      <line x1="15.5" y1="1.9" x2="40" y2="39.7" stroke="#4a4a4a" stroke-width="5"/>
+                      <circle cx="15.5" cy="1.9" r="3.5" fill="#ffd96b" stroke-width="2"/>
+
+                      <!-- バケットの関節（スティックの先）(55, 85) -->
+                      <g transform="translate(55 85)">
+                        <g class="bucket-rot">
+                          <!-- バケットの上の小さなつなぎの板 -->
+                          <rect x="-4" y="-12" width="32" height="10" rx="5" fill="#f7c33c"/>
+                          <circle cx="22" cy="-7" r="3" fill="#ffd96b" stroke-width="2"/>
+                          <!-- バケット：口は左向き。歯は付けず、丸みのある1枚の刃先 -->
+                          <path fill="#f7c33c"
+                                d="M -8 -4 L 38 -6 Q 62 10 58 34 Q 54 60 26 64 L 2 64 Q -6 64 -6 58 Q 12 28 -8 -4 Z"/>
+                          <g clip-path="url(#bucketClip)" stroke="none">
+                            <ellipse cx="30" cy="66" rx="42" ry="12" fill="#e0a52a"/>
+                            <path d="M -6 58 Q 12 28 -8 -4" fill="none" stroke="#e0a52a" stroke-width="10"/>
+                            <path d="M 40 -2 Q 58 12 55 32" fill="none" stroke="#ffd96b" stroke-width="4"/>
+                          </g>
+                          <path fill="none"
+                                d="M -8 -4 L 38 -6 Q 62 10 58 34 Q 54 60 26 64 L 2 64 Q -6 64 -6 58 Q 12 28 -8 -4 Z"/>
+                          <!-- バケットの関節のピン（腕より手前） -->
+                          <circle r="5" fill="#ffd96b" stroke-width="2.5"/>
+                          <circle r="1.6" fill="#5a3d1e" stroke="none"/>
+                        </g>
+                      </g>
+
+                      <!-- スティックの関節のピン（腕より手前）。腕を太くしたので、ピンも少し大きく -->
+                      <circle r="6" fill="#ffd96b" stroke-width="2.5"/>
+                      <circle r="2" fill="#5a3d1e" stroke="none"/>
+                    </g>
+                  </g>
+
+                  <!-- ブームの付け根のピン（車体の裏にかくれるが、形として入れておく） -->
+                  <circle r="5" fill="#ffd96b" stroke-width="2.5"/>
+                  <circle r="1.6" fill="#5a3d1e" stroke="none"/>
+                </g>
+              </g>
+            </g>
+
+            <!-- ===== 運転席 =====
+                 お手本に合わせて、大きくどっしりさせた（横 34〜126、縦 28〜115。下のはしは車体の裏）。
+                 屋根（y 28）は、ブームのいちばん高いところ（y 11 くらい）より少し低い -->
+            <path fill="#f7c33c" d="M 34 115 L 34 46 Q 34 28 52 28 L 104 28 Q 119 28 121 43 L 126 115 Z"/>
+            <g clip-path="url(#cabClip)" stroke="none">
+              <rect x="30" y="22" width="100" height="12" fill="#ffd96b"/>  <!-- 屋根の明るいところ -->
+            </g>
+            <path fill="none" d="M 34 115 L 34 46 Q 34 28 52 28 L 104 28 Q 119 28 121 43 L 126 115 Z"/>
+            <!-- 横の面と前の面のさかい目 -->
+            <path d="M 101 30 L 101 112" fill="none" stroke-width="1.5"/>
+            <!-- 横の窓（大きく） -->
+            <rect x="41" y="37" width="53" height="43" rx="7" fill="#bfe4f5" stroke-width="2.5"/>
+            <!-- 前の窓 -->
+            <path d="M 104 37 L 114 37 Q 118 37 118.5 41 L 121 76 Q 121.3 80 117 80 L 104 80 Z" fill="#bfe4f5" stroke-width="2.5"/>
+            <!-- ガラスに見せる、白いななめの線 -->
+            <g stroke="#ffffff" stroke-width="4" opacity="0.7" fill="none">
+              <path d="M 50 74 L 65 44"/>
+              <path d="M 61 74 L 76 44"/>
+              <path d="M 108 72 L 114 46"/>
+            </g>
+            <!-- ドアの線と取っ手 -->
+            <path d="M 39 86 L 39 110" fill="none" stroke-width="1.5"/>
+            <rect x="84" y="90" width="12" height="4" rx="2" fill="#5a3d1e" stroke="none"/>
+
+            <!-- ===== 車体（下の箱）。運転席を大きくしたぶん、高さを少しおさえた（縦 112〜160） ===== -->
+            <rect x="15" y="112" width="130" height="48" rx="14" fill="#f7c33c" stroke="none"/>
+            <g clip-path="url(#bodyClip)" stroke="none">
+              <rect x="15" y="112" width="130" height="7" fill="#ffd96b"/>   <!-- 上の面（明るい） -->
+              <rect x="15" y="151" width="130" height="9" fill="#e0a52a"/>   <!-- 下の面（影） -->
+            </g>
+            <rect x="15" y="112" width="130" height="48" rx="14" fill="none"/>
+            <!-- 前の面とのさかい目 -->
+            <path d="M 121 115 L 121 157" fill="none" stroke-width="1.5"/>
+            <!-- 後ろの通気口（横線3本） -->
+            <g stroke-width="3.5" fill="none">
+              <path d="M 24 125 L 38 125"/>
+              <path d="M 24 132 L 38 132"/>
+              <path d="M 24 139 L 38 139"/>
+            </g>
+            <!-- 前のライト2つ -->
+            <circle cx="128" cy="140" r="5" fill="#fff3c4" stroke-width="2"/>
+            <circle cx="139" cy="140" r="5" fill="#fff3c4" stroke-width="2"/>
+
+            <!-- ===== 手前のキャタピラ ===== -->
+            <!-- でこぼこ（太い点線。内がわ半分は、上のカプセルにかくれる） -->
+            <path class="tread" d="M 35 165 L 106.46 165 A 25 25 0 0 1 106.46 215 L 35 215 A 25 25 0 0 1 35 165 Z"
+                  fill="none" stroke="#333333" stroke-width="11"
+                  stroke-dasharray="6 6" stroke-linecap="butt"/>
+            <use href="#trackShape" fill="#454545" stroke="#3a2614"/>
+
+            <!-- 大きい車輪（左右）。ボルトの点で、回っているのが見える -->
+            <g transform="translate(35 190)">
+              <g class="spin">
+                <circle r="18" fill="#6e6e6e" stroke="#3a2614" stroke-width="2.5"/>
+                <circle r="7" fill="#555555" stroke="none"/>
+                <g fill="#8a8a8a" stroke="none">
+                  <circle cx="0" cy="-11" r="2.2"/>
+                  <circle cx="9.5" cy="5.5" r="2.2"/>
+                  <circle cx="-9.5" cy="5.5" r="2.2"/>
+                </g>
+              </g>
+            </g>
+            <g transform="translate(106.46 190)">
+              <g class="spin">
+                <circle r="18" fill="#6e6e6e" stroke="#3a2614" stroke-width="2.5"/>
+                <circle r="7" fill="#555555" stroke="none"/>
+                <g fill="#8a8a8a" stroke="none">
+                  <circle cx="0" cy="-11" r="2.2"/>
+                  <circle cx="9.5" cy="5.5" r="2.2"/>
+                  <circle cx="-9.5" cy="5.5" r="2.2"/>
+                </g>
+              </g>
+            </g>
+
+            <!-- 小さいローラー3つ（ボルトの点1つで、回っているのが見える） -->
+            <g transform="translate(58 201)">
+              <g class="spin spin-fast">
+                <circle r="5.5" fill="#5e5e5e" stroke="#3a2614" stroke-width="2"/>
+                <circle cx="0" cy="-2.6" r="1.4" fill="#8a8a8a" stroke="none"/>
+              </g>
+            </g>
+            <g transform="translate(71 201)">
+              <g class="spin spin-fast">
+                <circle r="5.5" fill="#5e5e5e" stroke="#3a2614" stroke-width="2"/>
+                <circle cx="0" cy="-2.6" r="1.4" fill="#8a8a8a" stroke="none"/>
+              </g>
+            </g>
+            <g transform="translate(84 201)">
+              <g class="spin spin-fast">
+                <circle r="5.5" fill="#5e5e5e" stroke="#3a2614" stroke-width="2"/>
+                <circle cx="0" cy="-2.6" r="1.4" fill="#8a8a8a" stroke="none"/>
+              </g>
+            </g>
+
+            <!-- ローラーの上の、黄色い細長いカバー -->
+            <rect x="46" y="178" width="50" height="10" rx="5" fill="#f7c33c" stroke-width="2.5"/>
+          </g>
+        </svg>
       </div>
     </div>
   </div>
 
   <script>
     // ===== 設定（数字を変えると動きが変わります） =====
-    const CAR_WIDTH = 260;   // ショベルカーのもともとの横幅（ピクセル）
+    const CAR_WIDTH = 300;   // ショベルカーのもともとの横幅（ピクセル）。CSS の .shovel の width と、SVG の横幅と同じ
     const START_X = 20;      // スタート地点（左からの距離）
     const TAPS_TO_END = 6;   // だいたい何回さわると右はしに着くか
                              // （スマホでは1歩の最低距離40pxがあるので、少し少なくなります）
@@ -327,7 +801,7 @@
     // ショベルカーの部品を取り出す
     const shovel = document.getElementById("shovel");
     const shovelSize = document.getElementById("shovelSize");
-    const armGroup = document.getElementById("armGroup");
+    const armGroup = document.getElementById("armGroup");   // SVG の中の、アーム全体のグループ
     const muteBtn = document.getElementById("muteBtn");
 
     let x = START_X;       // いまの位置
@@ -360,7 +834,7 @@
         shovel.style.transition = "transform " + duration + "ms ease-out";
         shovel.style.transform = "translateX(" + x + "px)";
 
-        // 動いているあいだだけ車輪を回す（duration ミリ秒たったら止める）
+        // 動いているあいだだけ、車輪を回し、キャタピラのでこぼこを流す（duration ミリ秒たったら止める）
         shovel.classList.add("moving");
         clearTimeout(movingTimer);
         movingTimer = setTimeout(function () {
@@ -372,7 +846,9 @@
     // アームを1回「ガシャン」と動かす
     function scoopArm() {
       armGroup.classList.remove("scoop");
-      armGroup.offsetWidth;              // おまじない（連打しても、アニメーションを最初からやり直せるように）
+      // おまじない（連打しても、アニメーションを最初からやり直せるように）。
+      // アームは SVG の部品で offsetWidth を持たないので、外がわの箱（HTML の部品）で反映させる
+      shovel.offsetWidth;
       armGroup.classList.add("scoop");
     }
 
