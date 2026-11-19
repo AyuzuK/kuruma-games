@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>アームの おと ききくらべ（ショベルカー）</title>
+  <!--
+    大人用のページです。子どもが遊ぶページではありません。
+    ショベルカーのゲーム（games/01-shovel）の「さわったときの音」の候補 A・B・C を、
+    いまの音とくらべて選ぶために使います（企画書 3-7、デザイン指示書 6章）。
+    選んだあとも、どの音を選んだかの記録として残します。
+    外部からの読み込みはありません（ゲームと同じ決まり）。
+  -->
+  <style>
+    /* ===== 色と大きさの決まり ===== */
+    :root {
+      --concrete: #E3E6E1;  /* 地の色（コンクリートのような、すこし青みのある灰色） */
+      --slab:     #F3F4F1;  /* 行の背景（明るいコンクリート） */
+      --ink:      #22303A;  /* 文字（スレートのような濃い青灰色） */
+      --steel:    #5C6B73;  /* うすい文字・線（鉄の色） */
+      --body:     #F0B323;  /* 候補のボタン（ショベルカーの黄色） */
+      --body-dk:  #B9850F;  /* 黄色ボタンの影 */
+      --alert:    #B8432F;  /* 「いまより おおきい」の印 */
+      --wave:     #2C6A86;  /* 波の絵の色 */
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      background: var(--concrete);
+      color: var(--ink);
+      font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+      line-height: 1.6;
+    }
+
+    main {
+      max-width: 60rem;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+
+    /* ===== 見出し ===== */
+    h1 {
+      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      line-height: 1.2;
+      margin: 0 0 .5rem;
+      font-weight: 800;
+      letter-spacing: .02em;
+    }
+    .lead {
+      margin: 0 0 2rem;
+      max-width: 40rem;
+      color: var(--steel);
+    }
+    h2 {
+      font-size: 1.25rem;
+      margin: 3rem 0 .75rem;
+      font-weight: 800;
+    }
+
+    /* ===== 音の行（いま・A・B・C） ===== */
+    .bank {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: .75rem;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 6.5rem 1fr auto;
+      grid-template-areas:
+        "key  text  roll"
+        "key  wave  wave";
+      gap: .5rem 1.25rem;
+      align-items: center;
+      background: var(--slab);
+      padding: 1rem 1.25rem 1rem 1rem;
+      border-left: .5rem solid var(--body);
+    }
+    .row.base { border-left-color: var(--ink); }
+
+    /* 大きな押しボタン（機械のボタンのように、押すと沈む） */
+    .key {
+      grid-area: key;
+      align-self: stretch;
+      min-height: 6.5rem;
+      font: inherit;
+      font-size: 2.6rem;
+      font-weight: 900;
+      color: var(--ink);
+      background: var(--body);
+      border: 0;
+      border-radius: .6rem;
+      box-shadow: 0 .4rem 0 var(--body-dk);
+      cursor: pointer;
+      transition: transform .06s, box-shadow .06s;
+    }
+    .base .key {
+      font-size: 1.5rem;
+      color: var(--slab);
+      background: var(--ink);
+      box-shadow: 0 .4rem 0 #0f171d;
+    }
+    /* 鳴っているあいだは沈んだまま（音の長さが目で分かる） */
+    .key:active,
+    .key.is-playing {
+      transform: translateY(.3rem);
+      box-shadow: 0 .1rem 0 var(--body-dk);
+    }
+    .base .key:active,
+    .base .key.is-playing { box-shadow: 0 .1rem 0 #0f171d; }
+
+    .text { grid-area: text; }
+    .name {
+      margin: 0;
+      font-size: 1.15rem;
+      font-weight: 800;
+    }
+    .desc {
+      margin: .15rem 0 0;
+      max-width: 34rem;
+    }
+    .spec {
+      margin: .25rem 0 0;
+      font-size: .85rem;
+      color: var(--steel);
+    }
+
+    .roll {
+      grid-area: roll;
+      font: inherit;
+      font-weight: 700;
+      padding: .6rem 1rem;
+      color: var(--ink);
+      background: transparent;
+      border: 2px solid var(--ink);
+      border-radius: 999px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .roll:active,
+    .roll.is-playing { background: var(--ink); color: var(--slab); }
+
+    /* 波の絵（「おおきさを くらべる」を押すと描かれる） */
+    .wave {
+      grid-area: wave;
+      display: block;
+      width: 100%;
+      height: 3.5rem;
+    }
+
+    /* キーボードで選んだときの枠 */
+    button:focus-visible {
+      outline: 3px solid var(--wave);
+      outline-offset: 3px;
+    }
+
+    /* ===== おおきさを くらべる ===== */
+    .measure {
+      font: inherit;
+      font-size: 1.1rem;
+      font-weight: 800;
+      padding: .8rem 1.5rem;
+      color: var(--slab);
+      background: var(--ink);
+      border: 0;
+      border-radius: .6rem;
+      cursor: pointer;
+    }
+    .measure:disabled { opacity: .5; cursor: wait; }
+    .status { margin: .5rem 0 0; color: var(--steel); min-height: 1.6em; }
+
+    .tables { display: grid; gap: 1.5rem; margin-top: 1rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--slab);
+      font-variant-numeric: tabular-nums;
+    }
+    caption {
+      text-align: left;
+      font-weight: 800;
+      padding: 0 0 .4rem;
+    }
+    th, td {
+      padding: .55rem .75rem;
+      text-align: right;
+      border-bottom: 1px solid var(--concrete);
+      vertical-align: top;
+    }
+    th:first-child, td:first-child { text-align: left; }
+    thead th { font-size: .85rem; color: var(--steel); font-weight: 700; }
+    td small { display: block; color: var(--steel); font-size: .8rem; }
+    /* 今の音より大きい数字 */
+    td.over { color: var(--alert); font-weight: 800; }
+    td.over small { color: var(--alert); }
+    .verdict { font-weight: 800; }
+    .verdict.ng { color: var(--alert); }
+
+    .notes {
+      margin-top: 1rem;
+      font-size: .9rem;
+      color: var(--steel);
+      max-width: 44rem;
+    }
+    .notes p { margin: .3rem 0; }
+
+    /* ===== 決まり ===== */
+    .rules {
+      margin: 0;
+      padding-left: 1.2rem;
+      max-width: 44rem;
+    }
+
+    /* ===== せまい画面 ===== */
+    @media (max-width: 40rem) {
+      .row {
+        grid-template-columns: 4.5rem 1fr;
+        grid-template-areas:
+          "key  text"
+          "key  roll"
+          "wave wave";
+      }
+      .roll { justify-self: start; }
+      .key { min-height: 4.5rem; font-size: 2rem; }
+      .base .key { font-size: 1.1rem; }
+      .table-wrap { overflow-x: auto; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .key { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>アームの おと ききくらべ</h1>
+    <p class="lead">
+      ショベルカーを さわったときの「ブロロッ・ガシャン」の候補です。
+      大きなボタンで1回、「3かい れんだ」で 0.25秒おきに3回鳴ります。
+      いいと思った音を1つ選んでください。
+    </p>
+
+    <!-- 音の行。data-play は、押したときに呼ぶ関数の名前 -->
+    <ol class="bank">
+      <li class="row base">
+        <button class="key" type="button" data-play="playTapSound" data-sec="0.6">いま</button>
+        <div class="text">
+          <p class="name">いまの おと</p>
+          <p class="desc">ゲームに いま入っている音。エンジンが短く「ブッ」、金属の響き（1040Hz・1480Hz）で「カン」。くらべる基準です。</p>
+          <p class="spec">長さ 0.6秒</p>
+        </div>
+        <button class="roll" type="button" data-play="playTapSound" data-sec="0.6" data-roll="1">3かい れんだ</button>
+        <canvas class="wave" data-wave="playTapSound" aria-hidden="true"></canvas>
+      </li>
+
+      <li class="row">
+        <button class="key" type="button" data-play="playTapA" data-sec="0.75">A</button>
+        <div class="text">
+          <p class="name">A　まんなか</p>
+          <p class="desc">エンジン長め・ゴロゴロふつう（1秒に16回）。ガは低い「ゴッ」と「ザッ」、シャラッを3回、最後にかすかな「ーン」。</p>
+          <p class="spec">長さ 0.75秒</p>
+        </div>
+        <button class="roll" type="button" data-play="playTapA" data-sec="0.75" data-roll="1">3かい れんだ</button>
+        <canvas class="wave" data-wave="playTapA" aria-hidden="true"></canvas>
+      </li>
+
+      <li class="row">
+        <button class="key" type="button" data-play="playTapB" data-sec="0.75">B</button>
+        <div class="text">
+          <p class="name">B　おもくて ひくい</p>
+          <p class="desc">エンジン低め・ゴロゴロ強め（1秒に12回、深くゆれる）。ガは低い「ドッ」を足して、どっしり。シャラッは2回で、こもった音。</p>
+          <p class="spec">長さ 0.75秒</p>
+        </div>
+        <button class="roll" type="button" data-play="playTapB" data-sec="0.75" data-roll="1">3かい れんだ</button>
+        <canvas class="wave" data-wave="playTapB" aria-hidden="true"></canvas>
+      </li>
+
+      <li class="row">
+        <button class="key" type="button" data-play="playTapC" data-sec="0.6">C</button>
+        <div class="text">
+          <p class="name">C　かるくて かわいい</p>
+          <p class="desc">エンジン短め・ゴロゴロ細かめ（1秒に20回）。ガは軽く、高めのシャラッ3回が目立つ。</p>
+          <p class="spec">長さ 0.6秒</p>
+        </div>
+        <button class="roll" type="button" data-play="playTapC" data-sec="0.6" data-roll="1">3かい れんだ</button>
+        <canvas class="wave" data-wave="playTapC" aria-hidden="true"></canvas>
+      </li>
+    </ol>
+
+    <h2>おおきさを くらべる</h2>
+    <p>音を実際に作って（スピーカーからは鳴りません）、大きさを数字にします。全体の音量 0.5 をかけたあとの値です。</p>
+    <button class="measure" type="button" id="measureBtn">おおきさを くらべる</button>
+    <p class="status" id="status" aria-live="polite"></p>
+
+    <div class="tables" id="tables" hidden>
+      <div class="table-wrap">
+        <table>
+          <caption>1かい</caption>
+          <thead>
+            <tr>
+              <th scope="col">おと</th>
+              <th scope="col">鳴っている長さ</th>
+              <th scope="col">ピーク</th>
+              <th scope="col">RMS（鳴っているあいだの平均）</th>
+              <th scope="col">いちばん強い 0.05秒の RMS</th>
+              <th scope="col">判定</th>
+            </tr>
+          </thead>
+          <tbody id="tableOne"></tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <caption>3かい れんだ（0.25秒おき）</caption>
+          <thead>
+            <tr>
+              <th scope="col">おと</th>
+              <th scope="col">鳴っている長さ</th>
+              <th scope="col">ピーク</th>
+              <th scope="col">RMS（鳴っているあいだの平均）</th>
+              <th scope="col">いちばん強い 0.05秒の RMS</th>
+              <th scope="col">判定</th>
+            </tr>
+          </thead>
+          <tbody id="tableRoll"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="notes">
+      <p>ピーク：いちばん大きい瞬間の値（1.0 が上限）。</p>
+      <p>RMS：鳴りはじめから鳴りおわりまでの、平均の大きさ。長くて静かな部分が多いと小さく出ます。</p>
+      <p>いちばん強い 0.05秒の RMS：耳で「大きい」と感じやすい、いちばん強いところの大きさ。</p>
+      <p>波の絵は、どの行も同じ目もりです。点線の横線は「いまの おと」のピーク、縦の線は 0.8秒の位置です。</p>
+    </div>
+
+    <h2>どの候補も守っている決まり</h2>
+    <ul class="rules">
+      <li>長さは 0.8秒まで（連打で重なりすぎないように）。</li>
+      <li>鳴りはじめは 0.01〜0.02秒かけて、ふわっと大きくする。</li>
+      <li>音の高さがある部品（tone）は 500Hz 以下だけ。いまの 1040Hz・1480Hz の響きは使わない。</li>
+      <li>「シャッ」の部品（noise）は 3500Hz 以下。</li>
+      <li>全体の音量 0.5、同時に3つまで（ゲームと同じ）。</li>
+      <li>重ねた全体の大きさは、ピークも RMS も、いまの音をこえない（上の「おおきさを くらべる」で確かめる）。</li>
+    </ul>
+  </main>
+
+  <script>
+    // =====================================================
+    // 決まった数（ゲームの index.html と同じ値）
+    // =====================================================
+    const VOLUME = 0.5;      // 全体の音量（0〜1。0.5 = 最大の半分くらい）
+    const MAX_VOICES = 3;    // 同時に鳴らす音の数の上限
+    const ROLL_GAP = 0.25;   // 「3かい れんだ」の間隔（秒）
+
+    // =====================================================
+    // 音（ここから「playTapSound」までは、ゲームの index.html からそのまま写したもの。
+    // ただし beginSound に「数字ではかるとき用」の1行だけ足してある）
+    // =====================================================
+    let audioCtx = null;    // 音を作る道具（最初にボタンを押したときに用意する）
+    let master = null;      // 全体の音量つまみ
+    let noiseBuffer = null; // 「シャッ」という音のもとになる「ザーッ」という音
+    let voices = 0;         // いま鳴っている音の数
+    let muted = false;      // 音を消しているか（このページでは使わないが、ゲームと同じ形にするため残す）
+
+    // 「おおきさを くらべる」で音を数字にするあいだだけ、ここに計測用の道具が入る。
+    // 入っているときは、beginSound がスピーカー用ではなく、こちらを返す（ゲームには入れない）
+    let renderCtx = null;
+
+    // 音を作る道具を用意する（ブラウザの決まりで、画面を触る前は音を出せない）
+    function getAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;            // 音に対応していないブラウザでは何もしない
+        audioCtx = new AC();
+
+        master = audioCtx.createGain();
+        master.gain.value = muted ? 0 : VOLUME;
+        master.connect(audioCtx.destination); // スピーカーにつなぐ
+
+        // 「ザーッ」という音（0.3秒分）を作っておく
+        const length = Math.floor(audioCtx.sampleRate * 0.3);
+        noiseBuffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate);
+        const data = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+      }
+      // 動いていなければ動かす（iPhone/iPad の「中断（interrupted）」にも対応）
+      if (audioCtx.state !== "running") audioCtx.resume();
+      return audioCtx;
+    }
+
+    // 音を鳴らしてよいか確かめて、準備する
+    //   seconds   … その音の長さ（秒）
+    //   important … true なら、同時に鳴る数の上限に関係なく鳴らす
+    // 鳴らせないとき（音を消している・上限に達している）は null を返す
+    function beginSound(seconds, important) {
+      if (renderCtx) return renderCtx;   // ← このページだけ：数字ではかるとき
+      if (muted) return null;
+      if (!important && voices >= MAX_VOICES) return null;
+      const ctx = getAudio();
+      if (!ctx) return null;
+
+      voices++;
+      setTimeout(function () { voices--; }, seconds * 1000); // 鳴り終わったら数を減らす
+      return ctx;
+    }
+
+    // 「ポー」のような音を1つ鳴らす部品（ゲームと同じ）
+    //   type      … 音色（"sine" やわらかい / "triangle" 少し明るい / "sawtooth" ブーッとした音）
+    //   freqStart → freqEnd … 音の高さ（だんだん変わる）
+    //   start     … 鳴らし始める時刻、length … 長さ（秒）、peak … 大きさ
+    //   filterFreq … 指定すると、キンキンする高い音を削ってやわらかくする（使わないときは 0）
+    //   holdRatio … 長さのうち、どこまで同じ大きさを保つか（省略すると 0.5 = 半分まで）。
+    //               0 にすると、鳴った瞬間から小さくなっていく（響きの音）
+    function tone(ctx, type, freqStart, freqEnd, start, length, peak, filterFreq, holdRatio) {
+      if (holdRatio === undefined) holdRatio = 0.5;
+      const osc = ctx.createOscillator();   // 音のもと
+      const gain = ctx.createGain();        // 音の大きさ
+      osc.type = type;
+      osc.frequency.setValueAtTime(freqStart, start);
+      osc.frequency.exponentialRampToValueAtTime(freqEnd, start + length);
+
+      // ふわっと始まって、少し続いて、ふわっと終わる（「ブツッ」という雑音を防ぐ）
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(peak, start + 0.02);
+      gain.gain.setValueAtTime(peak, start + Math.max(0.02, length * holdRatio));
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
+
+      osc.connect(gain);
+      let last = gain;
+      if (filterFreq) {
+        const filter = ctx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.value = filterFreq;
+        gain.connect(filter);
+        last = filter;
+      }
+      last.connect(master);
+
+      osc.start(start);
+      osc.stop(start + length + 0.05);
+    }
+
+    // 「シャッ」という音を1つ鳴らす部品（ゲームと同じ）
+    function noise(ctx, start, length, peak, bandFreq) {
+      const src = ctx.createBufferSource();
+      src.buffer = noiseBuffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";              // 決まった高さのあたりだけを残す
+      filter.frequency.value = bandFreq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(peak, start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
+
+      src.connect(filter);
+      filter.connect(gain);
+      gain.connect(master);
+      src.start(start);
+      src.stop(start + length + 0.05);
+    }
+
+    // 【いまの おと】触ったときの音：エンジン「ブッ」＋ アームの「ガシャン」（ゲームと同じ）
+    function playTapSound() {
+      const ctx = beginSound(0.6, false);
+      if (!ctx) return;
+      const t = ctx.currentTime;
+      // ブーン（エンジン）。走りぬけの「ブーーン」と同じ作り方で、短め・高さの上がり方は控えめ
+      tone(ctx, "sawtooth", 80, 120, t, 0.45, 0.5, 700);
+
+      // ここから「ガシャン」（アームが下がりきったとき = 0.2秒後）
+      const g = t + 0.2;
+      tone(ctx, "sawtooth", 160, 120, g, 0.08, 0.5, 1200);  // ガ（ジャリッとした音）
+      noise(ctx, g, 0.06, 0.5, 1200);                        // ガ（「ザッ」という音を重ねて、にごらせる）
+      noise(ctx, g + 0.06, 0.25, 0.45, 4500);                // シャ（長めの「シャー」）
+      tone(ctx, "triangle", 1040, 1040, g + 0.06, 0.3, 0.05, 0, 0); // ン（金属の響き。強いと「カン」に聞こえるので、ほんの少しだけ）
+      tone(ctx, "triangle", 1480, 1480, g + 0.06, 0.25, 0.04, 0, 0);
+    }
+
+    // =====================================================
+    // 新しい部品：エンジンの「ブロロッ」（候補 A・B・C で使う。ゲームに入れるときは、これも写す）
+    // =====================================================
+    // 「ブーン」（sawtooth ＋ やわらかくするフィルター）の大きさを、1秒に何回も細かく上下させて、
+    // 「ゴロゴロ」したゆれを作る。
+    //   wobbleRate  … 1秒に何回ゆらすか（12〜20 くらい）
+    //   wobbleDepth … ゆれの深さ（0〜0.5）。大きさが「1 − 2×深さ」から「1」のあいだでゆれる。
+    //                 例：0.3 なら 0.4〜1、0.45 なら 0.1〜1。ゆれは大きさを下げる向きだけなので、
+    //                 peak より大きくなることはない
+    // ゆらすための「ゆっくりの波」（LFO）は、耳には聞こえない速さ（1秒に数十回）で、
+    // 音の大きさを動かすだけに使う（スピーカーにはつながない）
+    function rumble(ctx, freqStart, freqEnd, start, length, peak, filterFreq, wobbleRate, wobbleDepth, holdRatio) {
+      if (holdRatio === undefined) holdRatio = 0.5;
+      const osc = ctx.createOscillator();   // 音のもと（ブーッとした音）
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(freqStart, start);
+      osc.frequency.exponentialRampToValueAtTime(freqEnd, start + length);
+
+      // 大きさの形（tone と同じ：ふわっと始まって、少し続いて、ふわっと終わる）
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(peak, start + 0.02);
+      gain.gain.setValueAtTime(peak, start + Math.max(0.02, length * holdRatio));
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
+
+      // ゴロゴロのゆれ：まんなかの大きさ（1 − 深さ）に、ゆっくりの波（± 深さ）を足す
+      const wobble = ctx.createGain();
+      wobble.gain.value = 1 - wobbleDepth;
+      const lfo = ctx.createOscillator();
+      lfo.type = "sine";
+      lfo.frequency.value = wobbleRate;
+      const lfoAmount = ctx.createGain();
+      lfoAmount.gain.value = wobbleDepth;
+      lfo.connect(lfoAmount);
+      lfoAmount.connect(wobble.gain);       // 音ではなく「大きさのつまみ」につなぐ
+
+      // 高い音を削ってやわらかくする
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = filterFreq;
+
+      osc.connect(gain);
+      gain.connect(wobble);
+      wobble.connect(filter);
+      filter.connect(master);
+
+      osc.start(start);
+      lfo.start(start);
+      osc.stop(start + length + 0.05);
+      lfo.stop(start + length + 0.05);
+    }
+
+    // =====================================================
+    // 候補 A・B・C（どれも playTapSound と同じ形。選んだ1つを、ゲームの playTapSound と入れかえる）
+    // 決まり：長さ 0.8秒まで／tone の高さは 500Hz 以下／noise の bandFreq は 3500Hz 以下
+    // =====================================================
+
+    // 【A まんなか】デザイン指示書 6章どおり
+    function playTapA() {
+      const ctx = beginSound(0.75, false);
+      if (!ctx) return;
+      const t = ctx.currentTime;
+      // ブロロッ（エンジン）：0.7秒。1秒に16回ゴロゴロ
+      rumble(ctx, 80, 110, t, 0.7, 0.36, 700, 16, 0.3);
+
+      // ここから「ガシャン」（アームが下がりきったとき = 0.2秒後）
+      const g = t + 0.2;
+      tone(ctx, "sawtooth", 110, 75, g, 0.1, 0.3, 500);     // ガ（低い「ゴッ」）
+      noise(ctx, g, 0.07, 0.35, 900);                        // ガ（にごった「ザッ」）
+      noise(ctx, g + 0.05, 0.07, 0.22, 2800);                // シャ（シャラッ 1）
+      noise(ctx, g + 0.10, 0.07, 0.18, 3200);                // シャ（シャラッ 2）
+      noise(ctx, g + 0.15, 0.08, 0.14, 3000);                // シャ（シャラッ 3）
+      tone(ctx, "sine", 390, 380, g + 0.19, 0.35, 0.03, 0, 0); // ン（とても小さい、まるい響き）
+    }
+
+    // 【B おもくて ひくい】大きな機械らしく。ゴロゴロ強め、ガがどっしり
+    function playTapB() {
+      const ctx = beginSound(0.75, false);
+      if (!ctx) return;
+      const t = ctx.currentTime;
+      // ブロロッ（エンジン）：低め・0.75秒。1秒に12回、深くゆれる
+      // （1回目の測定で、3かい れんだ のときに低い音が重なって今の音をこえたので、
+      //   エンジン・ガの大きさを、重さの釣り合いはそのままに 7〜8割へ下げた）
+      rumble(ctx, 60, 85, t, 0.75, 0.22, 550, 12, 0.45);
+
+      const g = t + 0.2;
+      tone(ctx, "sawtooth", 90, 55, g, 0.14, 0.24, 400);    // ガ（低い「ゴッ」）
+      tone(ctx, "sine", 70, 50, g, 0.18, 0.15);              // ガ（さらに低い「ドッ」。どっしりさせる）
+      noise(ctx, g, 0.09, 0.24, 600);                        // ガ（こもった「ザッ」）
+      noise(ctx, g + 0.07, 0.08, 0.18, 2000);                // シャ（シャラッ 1。低め）
+      noise(ctx, g + 0.13, 0.09, 0.14, 2200);                // シャ（シャラッ 2）
+      noise(ctx, g + 0.20, 0.3, 0.05, 1500);                 // ン（とても小さい、こもった余韻）
+    }
+
+    // 【C かるくて かわいい】短め。シャラッが目立つ
+    function playTapC() {
+      const ctx = beginSound(0.6, false);
+      if (!ctx) return;
+      const t = ctx.currentTime;
+      // ブロロッ（エンジン）：短め 0.5秒・少し高め。1秒に20回、細かくゆれる
+      rumble(ctx, 100, 140, t, 0.5, 0.28, 900, 20, 0.25);
+
+      const g = t + 0.2;
+      tone(ctx, "triangle", 200, 150, g, 0.07, 0.28, 900);   // ガ（軽い「コッ」。高い成分は削る）
+      noise(ctx, g, 0.05, 0.3, 1400);                        // ガ（軽い「ザッ」）
+      noise(ctx, g + 0.04, 0.06, 0.3, 3400);                 // シャ（シャラッ 1）
+      noise(ctx, g + 0.08, 0.06, 0.26, 3500);                // シャ（シャラッ 2）
+      noise(ctx, g + 0.12, 0.07, 0.22, 3300);                // シャ（シャラッ 3）
+      tone(ctx, "sine", 470, 460, g + 0.14, 0.25, 0.025, 0, 0); // ン（とても小さい、まるい響き）
+    }
+
+    // =====================================================
+    // ここからは、このページだけのしくみ（ゲームには入れない）
+    // =====================================================
+    const SOUNDS = {
+      playTapSound: { fn: playTapSound, label: "いまの おと" },
+      playTapA:     { fn: playTapA,     label: "A まんなか" },
+      playTapB:     { fn: playTapB,     label: "B おもくて ひくい" },
+      playTapC:     { fn: playTapC,     label: "C かるくて かわいい" }
+    };
+    const ORDER = ["playTapSound", "playTapA", "playTapB", "playTapC"];
+
+    // 鳴っているあいだ、ボタンを沈んだままにする（音の長さが目で分かる）
+    function holdButton(btn, seconds) {
+      btn.classList.add("is-playing");
+      clearTimeout(btn._holdTimer);
+      btn._holdTimer = setTimeout(function () {
+        btn.classList.remove("is-playing");
+      }, seconds * 1000);
+    }
+
+    // ボタンを押したとき
+    document.querySelectorAll("button[data-play]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const sound = SOUNDS[btn.dataset.play];
+        const sec = parseFloat(btn.dataset.sec);
+        if (btn.dataset.roll) {
+          // 3かい れんだ：0.25秒おきに3回。同時に3つまでの決まりは beginSound の中で守られる
+          for (let i = 0; i < 3; i++) {
+            setTimeout(sound.fn, i * ROLL_GAP * 1000);
+          }
+          holdButton(btn, ROLL_GAP * 2 + sec);
+        } else {
+          sound.fn();
+          holdButton(btn, sec);
+        }
+      });
+    });
+
+    // iPhone/iPad 用：指を離したときにも音の準備をしておく
+    document.addEventListener("pointerup", function () { getAudio(); });
+
+    // ----- 大きさを数字にする -----
+    const RENDER_RATE = 44100;
+    // 「ザーッ」のもとを1つだけ作り、どの音をはかるときも同じものを使う
+    // （毎回ちがうと、はかるたびに数字が少し変わってしまうため）
+    const sharedNoise = new Float32Array(Math.floor(RENDER_RATE * 0.3));
+    for (let i = 0; i < sharedNoise.length; i++) {
+      sharedNoise[i] = Math.random() * 2 - 1;
+    }
+
+    // 「いまの時刻」だけを start 秒にずらした、計測用の道具の代わり。
+    // 3かい れんだ を、1つの計測の中で 0.25秒ずつずらして作るために使う
+    function shiftedCtx(real, start) {
+      return {
+        currentTime: start,
+        sampleRate: real.sampleRate,
+        createOscillator:   function () { return real.createOscillator(); },
+        createGain:         function () { return real.createGain(); },
+        createBiquadFilter: function () { return real.createBiquadFilter(); },
+        createBufferSource: function () { return real.createBufferSource(); }
+      };
+    }
+
+    // 音を、スピーカーに出さずに作って、波のデータを返す
+    //   fn    … playTapSound などの関数
+    //   times … 何回鳴らすか（1 または 3）
+    function renderSound(fn, times) {
+      const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      const seconds = (times - 1) * ROLL_GAP + 1.0;
+      const off = new OAC(1, Math.ceil(RENDER_RATE * seconds), RENDER_RATE);
+
+      const offMaster = off.createGain();
+      offMaster.gain.value = VOLUME;           // ゲームと同じ全体の音量
+      offMaster.connect(off.destination);
+
+      const offNoise = off.createBuffer(1, sharedNoise.length, RENDER_RATE);
+      offNoise.getChannelData(0).set(sharedNoise);
+
+      // 部品（tone・noise・rumble）がつなぐ先を、いっとき計測用に入れかえる
+      const keepMaster = master;
+      const keepNoise = noiseBuffer;
+      master = offMaster;
+      noiseBuffer = offNoise;
+      try {
+        for (let i = 0; i < times; i++) {
+          renderCtx = shiftedCtx(off, i * ROLL_GAP);
+          fn();
+        }
+      } finally {
+        renderCtx = null;
+        master = keepMaster;
+        noiseBuffer = keepNoise;
+      }
+
+      return new Promise(function (resolve, reject) {
+        let done = false;
+        function finish(buffer) {
+          if (done) return;
+          done = true;
+          resolve(buffer.getChannelData(0));
+        }
+        off.oncomplete = function (e) { finish(e.renderedBuffer); };   // 古い Safari 用
+        const p = off.startRendering();
+        if (p && p.then) p.then(finish, reject);
+      });
+    }
+
+    // 波のデータから、ピーク・RMS・いちばん強い 0.05秒の RMS・鳴っている長さを出す
+    function analyze(data) {
+      const QUIET = 0.001;   // これより小さいところは「鳴っていない」とみなす
+      let peak = 0, first = -1, last = -1;
+      for (let i = 0; i < data.length; i++) {
+        const a = Math.abs(data[i]);
+        if (a > peak) peak = a;
+        if (a > QUIET) {
+          if (first < 0) first = i;
+          last = i;
+        }
+      }
+      if (first < 0) return { peak: 0, rms: 0, strong: 0, length: 0 };
+
+      // 2乗した値を足していった表（区間の平均をすばやく出すため）
+      const sum = new Float64Array(data.length + 1);
+      for (let i = 0; i < data.length; i++) sum[i + 1] = sum[i] + data[i] * data[i];
+
+      const rms = Math.sqrt((sum[last + 1] - sum[first]) / (last - first + 1));
+
+      const win = Math.floor(RENDER_RATE * 0.05);   // 0.05秒
+      const step = Math.floor(RENDER_RATE * 0.005); // 0.005秒ずつずらして見る
+      let strong = 0;
+      for (let s = 0; s + win <= data.length; s += step) {
+        const r = Math.sqrt((sum[s + win] - sum[s]) / win);
+        if (r > strong) strong = r;
+      }
+      return { peak: peak, rms: rms, strong: strong, length: (last - first + 1) / RENDER_RATE };
+    }
+
+    // 表の1行を作る
+    function tableRow(label, m, base, isBase) {
+      const tr = document.createElement("tr");
+      let over = false;
+
+      function cell(text) {
+        const td = document.createElement("td");
+        td.textContent = text;
+        tr.appendChild(td);
+        return td;
+      }
+      function numCell(key) {
+        const td = cell(m[key].toFixed(3));
+        if (!isBase) {
+          const small = document.createElement("small");
+          const ratio = Math.round(m[key] / base[key] * 100);
+          if (m[key] > base[key]) {
+            over = true;
+            td.classList.add("over");
+            small.textContent = "いまより おおきい（" + ratio + "%）";
+          } else {
+            small.textContent = "いまの " + ratio + "%";
+          }
+          td.appendChild(small);
+        }
+      }
+
+      cell(label);
+      cell(m.length.toFixed(2) + "秒");
+      numCell("peak");
+      numCell("rms");
+      numCell("strong");
+
+      const v = cell(isBase ? "基準" : (over ? "いまより おおきい" : "こえていない"));
+      v.classList.add("verdict");
+      if (over) v.classList.add("ng");
+      return tr;
+    }
+
+    // 波の絵を描く（どの行も同じ目もり）
+    function drawWave(canvas, data, scale, basePeak) {
+      const ratio = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      canvas.width = Math.round(w * ratio);
+      canvas.height = Math.round(h * ratio);
+      const c = canvas.getContext("2d");
+      c.scale(ratio, ratio);
+      c.clearRect(0, 0, w, h);
+
+      const mid = h / 2;
+      const seconds = data.length / RENDER_RATE;
+      const styles = getComputedStyle(document.documentElement);
+
+      // 波（1ドットごとに、その範囲のいちばん大きい値を上下に描く）
+      c.fillStyle = styles.getPropertyValue("--wave").trim();
+      const per = data.length / w;
+      for (let x = 0; x < w; x++) {
+        let m = 0;
+        const end = Math.min(data.length, Math.floor((x + 1) * per));
+        for (let i = Math.floor(x * per); i < end; i++) {
+          const a = Math.abs(data[i]);
+          if (a > m) m = a;
+        }
+        const y = (m / scale) * mid;
+        c.fillRect(x, mid - y, 1, Math.max(1, y * 2));
+      }
+
+      // 点線：いまの音のピーク
+      c.strokeStyle = styles.getPropertyValue("--steel").trim();
+      c.setLineDash([4, 4]);
+      c.lineWidth = 1;
+      const by = (basePeak / scale) * mid;
+      c.beginPath();
+      c.moveTo(0, mid - by); c.lineTo(w, mid - by);
+      c.moveTo(0, mid + by); c.lineTo(w, mid + by);
+      c.stroke();
+
+      // 縦の線：0.8秒
+      c.setLineDash([]);
+      c.strokeStyle = styles.getPropertyValue("--alert").trim();
+      const x08 = (0.8 / seconds) * w;
+      c.beginPath();
+      c.moveTo(x08, 0); c.lineTo(x08, h);
+      c.stroke();
+    }
+
+    const measureBtn = document.getElementById("measureBtn");
+    const statusEl = document.getElementById("status");
+
+    measureBtn.addEventListener("click", function () {
+      const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      if (!OAC) {
+        statusEl.textContent = "このブラウザでは はかれません。Edge か Chrome で開いてください。";
+        return;
+      }
+      measureBtn.disabled = true;
+      statusEl.textContent = "はかっています…";
+
+      // 1かい と 3かい れんだ を、順番に作る
+      const jobs = [];
+      ORDER.forEach(function (key) {
+        jobs.push(renderSound(SOUNDS[key].fn, 1));
+        jobs.push(renderSound(SOUNDS[key].fn, 3));
+      });
+
+      Promise.all(jobs).then(function (results) {
+        const one = {}, roll = {}, waves = {};
+        ORDER.forEach(function (key, i) {
+          waves[key] = results[i * 2];
+          one[key] = analyze(results[i * 2]);
+          roll[key] = analyze(results[i * 2 + 1]);
+        });
+
+        const tableOne = document.getElementById("tableOne");
+        const tableRoll = document.getElementById("tableRoll");
+        tableOne.textContent = "";
+        tableRoll.textContent = "";
+        ORDER.forEach(function (key) {
+          const isBase = key === "playTapSound";
+          tableOne.appendChild(tableRow(SOUNDS[key].label, one[key], one.playTapSound, isBase));
+          tableRoll.appendChild(tableRow(SOUNDS[key].label, roll[key], roll.playTapSound, isBase));
+        });
+        document.getElementById("tables").hidden = false;
+
+        // 波の絵：いちばん大きいピークに合わせて、全部の行を同じ目もりにする
+        let scale = 0;
+        ORDER.forEach(function (key) { scale = Math.max(scale, one[key].peak); });
+        scale = scale * 1.1 || 1;
+        ORDER.forEach(function (key) {
+          const canvas = document.querySelector('canvas[data-wave="' + key + '"]');
+          drawWave(canvas, waves[key], scale, one.playTapSound.peak);
+        });
+
+        statusEl.textContent = "はかりました。「ザーッ」の音はページを開くたびに作り直すので、開き直すと数字が少し変わります。";
+      }).catch(function () {
+        statusEl.textContent = "はかれませんでした。ページを開き直して、もう一度おしてください。";
+      }).then(function () {
+        measureBtn.disabled = false;
+      });
+    });
+  </script>
+</body>
+</html>
