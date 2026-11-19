@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <!-- スマホやタブレットでもちょうどいい大きさで表示するための設定 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>はたらくくるま</title>
+
+  <style>
+    /* ===== 画面全体 ===== */
+    html, body {
+      touch-action: none;            /* 2本指の拡大・ダブルタップ拡大・スクロールを止める */
+      overscroll-behavior: none;     /* 画面のはしを引っぱったときの「びよーん」を止める */
+    }
+
+    body {
+      margin: 0;
+      height: 100vh;                 /* 古いブラウザ用 */
+      height: 100dvh;
+      overflow: hidden;
+      background: #bfe9ff;           /* 空の色（ゲームと同じ） */
+      font-family: system-ui, sans-serif; /* 端末に入っている書体だけを使う */
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      -webkit-tap-highlight-color: transparent;
+
+      /* ボタンを画面のまん中に置く */
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+    }
+
+    /* 上の題名（大人向け。子どもは絵で選ぶ） */
+    .title {
+      margin: 0;
+      font-size: clamp(22px, 6vw, 34px);
+      font-weight: bold;
+      color: #333;
+    }
+
+    /* ===== ゲームを選ぶボタン =====
+       おもちゃのブロックのように、下に濃い影を付けて「押せそう」に見せる */
+    .game-button {
+      position: relative;
+      display: block;
+      width: 300px;
+      height: 240px;
+      border: 6px solid #333;
+      border-radius: 32px;
+      background: #8fd3ff;           /* ボタンの中の空 */
+      box-shadow: 0 10px 0 #333;     /* 下の影 */
+      overflow: hidden;
+      animation: purupuru 1.2s ease-in-out infinite; /* ゆっくり揺れて「さわってね」と伝える */
+    }
+
+    /* ボタンの中の地面 */
+    .game-button .ground {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 50px;
+      background: #c8a165;
+      border-top: 6px solid #7cc254;
+    }
+
+    /* 押したときに、影の分だけ沈む */
+    .game-button.pressed {
+      transform: translateY(8px);
+      box-shadow: 0 2px 0 #333;
+      animation: none;
+    }
+
+    @keyframes purupuru {
+      0%, 100% { transform: translateY(0)    rotate(0deg); }
+      25%      { transform: translateY(-4px) rotate(-1deg); }
+      75%      { transform: translateY(-4px) rotate(1deg); }
+    }
+
+    /* 動きを減らす設定にしている端末では、揺らさない */
+    @media (prefers-reduced-motion: reduce) {
+      .game-button { animation: none; }
+    }
+
+    /* ===== ボタンの中の小さなショベルカー（ゲームと同じ作り） ===== */
+    .shovel {
+      position: absolute;
+      left: 22px;
+      bottom: 50px;                  /* 地面の上に乗せる */
+      width: 260px;
+      height: 200px;
+    }
+
+    .track {
+      position: absolute;
+      left: 10px;
+      bottom: 0;
+      width: 180px;
+      height: 45px;
+      background: #444;
+      border-radius: 25px;
+    }
+
+    .wheel {
+      position: absolute;
+      bottom: 8px;
+      width: 30px;
+      height: 30px;
+      background: #999;
+      border: 4px solid #222;
+      border-radius: 50%;
+      box-sizing: border-box;
+    }
+    .wheel1 { left: 20px; }
+    .wheel2 { left: 75px; }
+    .wheel3 { left: 130px; }
+
+    .body {
+      position: absolute;
+      left: 20px;
+      bottom: 45px;
+      width: 160px;
+      height: 55px;
+      background: #ffc400;
+      border: 4px solid #333;
+      border-radius: 8px;
+      box-sizing: border-box;
+    }
+
+    .cab {
+      position: absolute;
+      left: 30px;
+      bottom: 96px;
+      width: 75px;
+      height: 70px;
+      background: #ffc400;
+      border: 4px solid #333;
+      border-radius: 10px 10px 0 0;
+      box-sizing: border-box;
+    }
+
+    .window {
+      position: absolute;
+      left: 12px;
+      top: 10px;
+      width: 45px;
+      height: 32px;
+      background: #dff3ff;
+      border: 3px solid #333;
+      border-radius: 6px;
+      box-sizing: border-box;
+    }
+
+    .arm {
+      position: absolute;
+      left: 140px;
+      bottom: 110px;
+      width: 100px;
+      height: 22px;
+      background: #ffc400;
+      border: 4px solid #333;
+      border-radius: 10px;
+      box-sizing: border-box;
+      transform-origin: left center;
+      transform: rotate(-25deg);
+    }
+
+    .arm2 {
+      position: absolute;
+      left: 218px;
+      bottom: 70px;
+      width: 22px;
+      height: 90px;
+      background: #ffc400;
+      border: 4px solid #333;
+      border-radius: 10px;
+      box-sizing: border-box;
+    }
+
+    .bucket {
+      position: absolute;
+      left: 205px;
+      bottom: 40px;
+      width: 50px;
+      height: 40px;
+      background: #777;
+      border: 4px solid #333;
+      border-radius: 0 0 25px 25px;
+      box-sizing: border-box;
+    }
+  </style>
+</head>
+<body>
+
+  <h1 class="title">はたらくくるま</h1>
+
+  <!-- ショベルカーのゲームへのボタン。
+       ファイルをダブルクリックで開いたときも動くように、index.html まで書く -->
+  <a class="game-button" id="shovelGame" href="games/01-shovel/index.html" aria-label="しょべるかー">
+    <div class="ground"></div>
+    <div class="shovel">
+      <div class="arm"></div>
+      <div class="arm2"></div>
+      <div class="bucket"></div>
+      <div class="track">
+        <div class="wheel wheel1"></div>
+        <div class="wheel wheel2"></div>
+        <div class="wheel wheel3"></div>
+      </div>
+      <div class="body"></div>
+      <div class="cab">
+        <div class="window"></div>
+      </div>
+    </div>
+  </a>
+
+  <script>
+    // 指が触れた瞬間に、ボタンを沈ませてからゲームを開く
+    // （ゲームと同じく、指がすべっても反応するように pointerdown を使う）
+    document.querySelectorAll(".game-button").forEach(function (button) {
+      button.addEventListener("pointerdown", function (e) {
+        if (!e.isPrimary) return;          // 手のひらで触っても1回だけ
+        button.classList.add("pressed");
+        setTimeout(function () {
+          window.location.href = button.getAttribute("href");
+        }, 150);                           // 沈んだのが見えるくらい、少しだけ待つ
+      });
+    });
+
+    // ブラウザの「戻る」でこの画面に戻ってきたとき、ボタンが沈んだままにならないようにする
+    window.addEventListener("pageshow", function () {
+      document.querySelectorAll(".game-button").forEach(function (button) {
+        button.classList.remove("pressed");
+      });
+    });
+  </script>
+
+</body>
+</html>

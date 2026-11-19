@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <!-- スマホやタブレットでもちょうどいい大きさで表示するための設定 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>はたらくくるま れんしゅう</title>
+
+  <style>
+    /* ===== 画面全体 ===== */
+    html, body {
+      touch-action: none;            /* 2本指の拡大・ダブルタップ拡大・スクロールを止める */
+      overscroll-behavior: none;     /* 画面のはしを引っぱったときの「びよーん」を止める */
+    }
+
+    body {
+      margin: 0;
+      height: 100vh;                 /* 古いブラウザ用 */
+      height: 100dvh;                /* アドレスバーの出し入れに合わせた高さ */
+      overflow: hidden;              /* はみ出してもスクロールバーを出さない */
+      background: #bfe9ff;           /* 空の色 */
+      font-family: sans-serif;
+      -webkit-user-select: none;     /* 連打しても文字が選択されないように（Safari用） */
+      user-select: none;
+      -webkit-touch-callout: none;   /* 長押ししてもメニューが出ないように（iPhone/iPad用） */
+      -webkit-tap-highlight-color: transparent; /* タップ時の青いハイライトを消す */
+    }
+
+    /* 上に出すメッセージ */
+    .message {
+      text-align: center;
+      font-size: clamp(20px, 6vw, 32px); /* 画面がせまいときは文字を少し小さく（20〜32px） */
+      padding: 0 80px;               /* 右上の音ボタンと重ならないように、左右をあける */
+      font-weight: bold;
+      color: #333;
+      margin-top: 30px;
+      position: relative;            /* z-index を効かせるために必要 */
+      z-index: 1;                    /* 車や地面と重なっても、文字を手前に出す */
+    }
+
+    /* 地面 */
+    .ground {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 25vh;
+      height: 25dvh;
+      background: #c8a165;           /* 土の色 */
+      border-top: 8px solid #7cc254; /* 草の色 */
+    }
+
+    /* ===== ショベルカー全体 =====
+       3つの箱を重ねて、役割を分けています。
+         .shovel        … 左右の「位置」を受け持つ（右に動く）
+         .shovel-size   … 「大きさ」を受け持つ（小さい画面では縮める）
+         .shovel-wobble … 「ぷるぷる」を受け持つ（待っているあいだ揺れる）
+       1つの箱で全部やろうとすると、動きどうしがぶつかるためです。 */
+    .shovel {
+      position: absolute;
+      left: 0;
+      bottom: 25vh;
+      bottom: 25dvh;                 /* 地面の上に乗せる */
+      width: 260px;
+      height: 200px;
+      /* 動く速さ（transition）は、距離に合わせて JavaScript の moveTo で決めています */
+    }
+
+    .shovel-size,
+    .shovel-wobble {
+      position: absolute;
+      inset: 0;                      /* 親の箱いっぱいに広げる */
+    }
+
+    .shovel-size {
+      transform-origin: left bottom; /* 縮めるときは左下を基準にする（地面から浮かないように） */
+    }
+
+    .shovel-wobble {
+      transform-origin: center bottom;
+    }
+
+    /* 待っているあいだ（.waiting が付いているあいだ）だけ、ぷるぷる揺らす */
+    .shovel.waiting .shovel-wobble {
+      animation: purupuru 0.5s ease-in-out infinite;
+    }
+
+    @keyframes purupuru {
+      0%   { transform: translateY(0)    rotate(0deg); }
+      25%  { transform: translateY(-4px) rotate(-1.5deg); }
+      50%  { transform: translateY(0)    rotate(0deg); }
+      75%  { transform: translateY(-4px) rotate(1.5deg); }
+      100% { transform: translateY(0)    rotate(0deg); }
+    }
+
+    /* キャタピラ（足回り） */
+    .track {
+      position: absolute;
+      left: 10px;
+      bottom: 0;
+      width: 180px;
+      height: 45px;
+      background: #444;
+      border-radius: 25px;           /* 角を丸くしてカプセル形に */
+    }
+
+    /* キャタピラの中の車輪（丸） */
+    .wheel {
+      position: absolute;
+      bottom: 8px;
+      width: 30px;
+      height: 30px;
+      background: #999;
+      border: 4px solid #222;
+      border-radius: 50%;            /* 50% にすると丸になる */
+      box-sizing: border-box;
+    }
+    .wheel1 { left: 20px; }
+    .wheel2 { left: 75px; }
+    .wheel3 { left: 130px; }
+
+    /* 車体（黄色い四角） */
+    .body {
+      position: absolute;
+      left: 20px;
+      bottom: 45px;
+      width: 160px;
+      height: 55px;
+      background: #ffc400;
+      border: 4px solid #333;
+      border-radius: 8px;
+      box-sizing: border-box;
+    }
+
+    /* 運転席 */
+    .cab {
+      position: absolute;
+      left: 30px;
+      bottom: 96px;
+      width: 75px;
+      height: 70px;
+      background: #ffc400;
+      border: 4px solid #333;
+      border-radius: 10px 10px 0 0;
+      box-sizing: border-box;
+    }
+
+    /* 運転席の窓 */
+    .window {
+      position: absolute;
+      left: 12px;
+      top: 10px;
+      width: 45px;
+      height: 32px;
+      background: #8fd3ff;
+      border: 3px solid #333;
+      border-radius: 6px;
+      box-sizing: border-box;
+    }
+
+    /* アーム（腕）：ななめに傾けた細長い四角 */
+    .arm {
+      position: absolute;
+      left: 140px;
+      bottom: 110px;
+      width: 100px;
+      height: 22px;
+      background: #ffc400;
+      border: 4px solid #333;
+      border-radius: 10px;
+      box-sizing: border-box;
+      transform-origin: left center; /* 左はしを支点にして回す */
+      transform: rotate(-25deg);
+    }
+
+    /* 先っぽのアーム（下向き） */
+    .arm2 {
+      position: absolute;
+      left: 218px;
+      bottom: 70px;
+      width: 22px;
+      height: 90px;
+      background: #ffc400;
+      border: 4px solid #333;
+      border-radius: 10px;
+      box-sizing: border-box;
+    }
+
+    /* バケット（土をすくう部分） */
+    .bucket {
+      position: absolute;
+      left: 205px;
+      bottom: 40px;
+      width: 50px;
+      height: 40px;
+      background: #777;
+      border: 4px solid #333;
+      border-radius: 0 0 25px 25px;  /* 下だけ丸くしてお椀の形に */
+      box-sizing: border-box;
+    }
+
+    /* ===== 車輪が回る ===== */
+    /* 車輪の中の十字の線（スポーク）。これがあると、回っているのが目で見てわかる */
+    .wheel::before,
+    .wheel::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 1px;
+      bottom: 1px;
+      width: 3px;
+      margin-left: -1.5px;
+      background: #222;
+    }
+    .wheel::after {
+      transform: rotate(90deg);      /* 2本目は横向きにして十字にする */
+    }
+
+    /* 車が動いているあいだ（.moving が付いているあいだ）だけ、車輪を回す */
+    .shovel.moving .wheel {
+      animation: kururu 0.5s linear infinite;
+    }
+    @keyframes kururu {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    /* ===== アームが動く ===== */
+    /* アーム・先っぽのアーム・バケットをひとまとめにした箱。
+       アームのつけね（左から140px、上から79px）を支点にして回す */
+    .arm-group {
+      position: absolute;
+      inset: 0;
+      transform-origin: 140px 79px;
+    }
+    /* .scoop が付いたら、1回だけ「ガシャン」と下がって戻る */
+    .arm-group.scoop {
+      animation: gashan 0.5s ease-in-out;
+    }
+    @keyframes gashan {
+      0%   { transform: rotate(0deg); }
+      40%  { transform: rotate(20deg); }  /* 下がりきったところ（ここで「ガシャン」の音） */
+      100% { transform: rotate(0deg); }
+    }
+
+    /* ===== 音を消すボタン（右上） ===== */
+    .mute-btn {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 2;                    /* いちばん手前に出す */
+      width: 52px;
+      height: 52px;
+      padding: 0;
+      border: 3px solid transparent;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.4);
+      font-size: 24px;
+      line-height: 1;
+      opacity: 0.6;                  /* 音が出ているときは目立たせない（子どもが気にしないように） */
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    /* 長押ししているあいだ、2秒かけて少しずつ大きくなる（「押せているよ」の合図） */
+    .mute-btn.pressing {
+      transform: scale(1.3);
+      transition: transform 2s linear;
+    }
+    /* 音を消しているときは、はっきり見えるようにする */
+    .mute-btn.muted {
+      width: 64px;
+      height: 64px;
+      font-size: 32px;
+      opacity: 1;
+      background: #fff;
+      border-color: #e53935;         /* 赤いふち */
+    }
+  </style>
+</head>
+<body>
+
+  <div class="message">さわると うごくよ！</div>
+
+  <!-- 音を消すボタン（大人用。2秒長押しで切り替え） -->
+  <button class="mute-btn" id="muteBtn" type="button" aria-label="おとを けす（2びょう ながおし）">🔊</button>
+
+  <div class="ground"></div>
+
+  <!-- ショベルカー本体（パーツの組み合わせ） -->
+  <div class="shovel waiting" id="shovel">
+    <div class="shovel-size" id="shovelSize">
+      <div class="shovel-wobble">
+        <!-- アームの3つの部品は、いっしょに動くように1つの箱にまとめる -->
+        <div class="arm-group" id="armGroup">
+          <div class="arm"></div>
+          <div class="arm2"></div>
+          <div class="bucket"></div>
+        </div>
+        <div class="track">
+          <div class="wheel wheel1"></div>
+          <div class="wheel wheel2"></div>
+          <div class="wheel wheel3"></div>
+        </div>
+        <div class="body"></div>
+        <div class="cab">
+          <div class="window"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== 設定（数字を変えると動きが変わります） =====
+    const CAR_WIDTH = 260;   // ショベルカーのもともとの横幅（ピクセル）
+    const START_X = 20;      // スタート地点（左からの距離）
+    const TAPS_TO_END = 6;   // だいたい何回さわると右はしに着くか
+                             // （スマホでは1歩の最低距離40pxがあるので、少し少なくなります）
+    const MOVE_TIME = 600;   // ふつうの1歩にかかる時間（ミリ秒）
+    const MAX_MOVE_TIME = 1500; // 画面の外を回るときの1回の移動の上限（ミリ秒）。待ち時間が長くなりすぎないように
+    const WAIT_TIME = 1500;  // さわらなくなってから、ぷるぷるを始めるまでの時間（ミリ秒）
+
+    // ----- 音の設定 -----
+    const VOLUME = 0.5;          // 全体の音量（0〜1。0.5 = 最大の半分くらい）
+    const MAX_VOICES = 3;        // 同時に鳴らす音の数の上限（連打しても音が重なりすぎないように）
+    const LONG_PRESS_TIME = 2000; // 音を消すボタンの長押し時間（ミリ秒）
+
+    // ショベルカーの部品を取り出す
+    const shovel = document.getElementById("shovel");
+    const shovelSize = document.getElementById("shovelSize");
+    const armGroup = document.getElementById("armGroup");
+    const muteBtn = document.getElementById("muteBtn");
+
+    let x = START_X;       // いまの位置
+    let scale = 1;         // いまの大きさ（1 = もとの大きさ）
+    let busy = false;      // 画面の外を回っているあいだは true（そのあいだはさわっても動かない）
+    let waitTimer = null;  // ぷるぷるを始めるタイマー
+    let movingTimer = null; // 車輪の回転を止めるタイマー
+
+    // 画面の大きさに合わせて、ショベルカーの大きさを決める
+    function updateSize() {
+      scale = Math.min(1, window.innerWidth / 600, window.innerHeight / 500);
+      scale = Math.max(0.5, scale); // 小さくなりすぎないように
+      shovelSize.style.transform = "scale(" + scale + ")";
+    }
+
+    // いまの見た目の横幅
+    function carWidth() {
+      return CAR_WIDTH * scale;
+    }
+
+    // ショベルカーを newX の位置へ、duration ミリ秒かけて動かす
+    // duration が 0 のときは、アニメーションなしで一瞬で移動する
+    function moveTo(newX, duration) {
+      x = newX;
+      if (duration === 0) {
+        shovel.style.transition = "none";
+        shovel.style.transform = "translateX(" + x + "px)";
+        shovel.offsetWidth;              // ブラウザに一度反映させるおまじない
+      } else {
+        shovel.style.transition = "transform " + duration + "ms ease-out";
+        shovel.style.transform = "translateX(" + x + "px)";
+
+        // 動いているあいだだけ車輪を回す（duration ミリ秒たったら止める）
+        shovel.classList.add("moving");
+        clearTimeout(movingTimer);
+        movingTimer = setTimeout(function () {
+          shovel.classList.remove("moving");
+        }, duration);
+      }
+    }
+
+    // アームを1回「ガシャン」と動かす
+    function scoopArm() {
+      armGroup.classList.remove("scoop");
+      armGroup.offsetWidth;              // おまじない（連打しても、アニメーションを最初からやり直せるように）
+      armGroup.classList.add("scoop");
+    }
+
+    // distance ピクセル動くのにかける時間を決める
+    // ふつうの1歩（step）と同じ速さになるように、距離に比例させる（ただし上限あり）
+    function timeFor(distance, step) {
+      return Math.min(MAX_MOVE_TIME, MOVE_TIME * distance / step);
+    }
+
+    // ぷるぷるを止める
+    function stopWaiting() {
+      clearTimeout(waitTimer);
+      shovel.classList.remove("waiting");
+    }
+
+    // しばらくしたら、ぷるぷるを始める
+    function startWaitingLater(delay) {
+      clearTimeout(waitTimer);
+      waitTimer = setTimeout(function () {
+        shovel.classList.add("waiting");
+      }, delay);
+    }
+
+    // =====================================================
+    // 音（ブラウザの機能 Web Audio API で、その場で音を作る）
+    // =====================================================
+    let audioCtx = null;    // 音を作る道具（最初に画面を触ったときに用意する）
+    let master = null;      // 全体の音量つまみ
+    let noiseBuffer = null; // 「シャッ」という音のもとになる「ザーッ」という音
+    let voices = 0;         // いま鳴っている音の数
+    let muted = false;      // 音を消しているか
+
+    // 音を作る道具を用意する（ブラウザの決まりで、画面を触る前は音を出せない）
+    function getAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;            // 音に対応していないブラウザでは何もしない
+        audioCtx = new AC();
+
+        master = audioCtx.createGain();
+        master.gain.value = muted ? 0 : VOLUME;
+        master.connect(audioCtx.destination); // スピーカーにつなぐ
+
+        // 「ザーッ」という音（0.3秒分）を作っておく
+        const length = Math.floor(audioCtx.sampleRate * 0.3);
+        noiseBuffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate);
+        const data = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+      }
+      // 動いていなければ動かす。「一時停止（suspended）」のほか、
+      // iPhone/iPad ではほかのアプリから戻ったときなどに「中断（interrupted）」になることがある
+      if (audioCtx.state !== "running") audioCtx.resume();
+      return audioCtx;
+    }
+
+    // 音を鳴らしてよいか確かめて、準備する
+    //   seconds   … その音の長さ（秒）
+    //   important … true なら、同時に鳴る数の上限に関係なく鳴らす（走りぬけ・戻ってきた音）
+    // 鳴らせないとき（音を消している・上限に達している）は null を返す
+    function beginSound(seconds, important) {
+      if (muted) return null;
+      if (!important && voices >= MAX_VOICES) return null;
+      const ctx = getAudio();
+      if (!ctx) return null;
+
+      voices++;
+      setTimeout(function () { voices--; }, seconds * 1000); // 鳴り終わったら数を減らす
+      return ctx;
+    }
+
+    // 「ポー」のような音を1つ鳴らす部品
+    //   type      … 音色（"sine" やわらかい / "triangle" 少し明るい / "sawtooth" ブーッとした音）
+    //   freqStart → freqEnd … 音の高さ（だんだん変わる）
+    //   start     … 鳴らし始める時刻、length … 長さ（秒）、peak … 大きさ
+    //   filterFreq … 指定すると、キンキンする高い音を削ってやわらかくする（使わないときは 0）
+    //   holdRatio … 長さのうち、どこまで同じ大きさを保つか（省略すると 0.5 = 半分まで）。
+    //               0 にすると、鳴った瞬間から小さくなっていく（金属が響くような音）
+    function tone(ctx, type, freqStart, freqEnd, start, length, peak, filterFreq, holdRatio) {
+      if (holdRatio === undefined) holdRatio = 0.5;
+      const osc = ctx.createOscillator();   // 音のもと
+      const gain = ctx.createGain();        // 音の大きさ
+      osc.type = type;
+      osc.frequency.setValueAtTime(freqStart, start);
+      osc.frequency.exponentialRampToValueAtTime(freqEnd, start + length);
+
+      // ふわっと始まって、少し続いて、ふわっと終わる（「ブツッ」という雑音を防ぐ）
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(peak, start + 0.02);
+      gain.gain.setValueAtTime(peak, start + Math.max(0.02, length * holdRatio));
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
+
+      osc.connect(gain);
+      let last = gain;
+      if (filterFreq) {
+        const filter = ctx.createBiquadFilter();
+        filter.type = "lowpass";
+        filter.frequency.value = filterFreq;
+        gain.connect(filter);
+        last = filter;
+      }
+      last.connect(master);
+
+      osc.start(start);
+      osc.stop(start + length + 0.05);
+    }
+
+    // 「シャッ」という音を1つ鳴らす部品
+    function noise(ctx, start, length, peak, bandFreq) {
+      const src = ctx.createBufferSource();
+      src.buffer = noiseBuffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";              // 決まった高さのあたりだけを残す
+      filter.frequency.value = bandFreq;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(peak, start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
+
+      src.connect(filter);
+      filter.connect(gain);
+      gain.connect(master);
+      src.start(start);
+      src.stop(start + length + 0.05);
+    }
+
+    // 触ったときの音：エンジン「ブッ」＋ アームの「ガシャン」
+    function playTapSound() {
+      const ctx = beginSound(0.6, false);
+      if (!ctx) return;
+      const t = ctx.currentTime;
+      // ブーン（エンジン）。走りぬけの「ブーーン」と同じ作り方で、短め・高さの上がり方は控えめ
+      tone(ctx, "sawtooth", 80, 120, t, 0.45, 0.5, 700);
+
+      // ここから「ガシャン」（アームが下がりきったとき = 0.2秒後）
+      const g = t + 0.2;
+      tone(ctx, "sawtooth", 160, 120, g, 0.08, 0.5, 1200);  // ガ（ジャリッとした音）
+      noise(ctx, g, 0.06, 0.5, 1200);                        // ガ（「ザッ」という音を重ねて、にごらせる）
+      noise(ctx, g + 0.06, 0.25, 0.45, 4500);                // シャ（長めの「シャー」）
+      tone(ctx, "triangle", 1040, 1040, g + 0.06, 0.3, 0.05, 0, 0); // ン（金属の響き。強いと「カン」に聞こえるので、ほんの少しだけ）
+      tone(ctx, "triangle", 1480, 1480, g + 0.06, 0.25, 0.04, 0, 0);
+    }
+
+    // 右はしから走りぬけるときの音：「ブーーン」（seconds 秒）
+    function playDriveSound(seconds) {
+      const ctx = beginSound(seconds, true);
+      if (!ctx) return;
+      tone(ctx, "sawtooth", 80, 160, ctx.currentTime, seconds, 0.5, 700);
+    }
+
+    // 左から戻ってきたときの音：「ピポッ♪」
+    function playArriveSound() {
+      const ctx = beginSound(0.35, true);
+      if (!ctx) return;
+      const t = ctx.currentTime;
+      tone(ctx, "sine", 880, 880, t, 0.14, 0.4);            // ピ
+      tone(ctx, "sine", 1320, 1320, t + 0.15, 0.18, 0.4);   // ポッ
+    }
+
+    // =====================================================
+    // 音を消すボタン（2秒長押しで切り替え）
+    // =====================================================
+    let pressTimer = null;
+
+    function setMuted(value) {
+      muted = value;
+      muteBtn.textContent = muted ? "🔇" : "🔊";
+      muteBtn.classList.toggle("muted", muted);
+      muteBtn.setAttribute("aria-label",
+        muted ? "おとを だす（2びょう ながおし）" : "おとを けす（2びょう ながおし）");
+      if (master) master.gain.value = muted ? 0 : VOLUME; // 鳴っている音もすぐ消す
+    }
+
+    // 押し始めたら、2秒タイマーをスタート
+    muteBtn.addEventListener("pointerdown", function (e) {
+      // 指で触ると、ブラウザは「指を離すまでボタンを触り続けている」とみなす（ポインターキャプチャ）。
+      // そのままだと指がボタンの外にずれても気づけないので、これを解除して、外に出たら取り消せるようにする
+      if (muteBtn.hasPointerCapture(e.pointerId)) {
+        muteBtn.releasePointerCapture(e.pointerId);
+      }
+      muteBtn.classList.add("pressing");
+      clearTimeout(pressTimer);
+      pressTimer = setTimeout(function () {
+        muteBtn.classList.remove("pressing");
+        setMuted(!muted);
+      }, LONG_PRESS_TIME);
+    });
+
+    // 2秒たつ前に指を離したり、ボタンの外に指がずれたりしたら、取り消す
+    function cancelPress() {
+      clearTimeout(pressTimer);
+      muteBtn.classList.remove("pressing");
+    }
+    muteBtn.addEventListener("pointerup", cancelPress);
+    muteBtn.addEventListener("pointerleave", cancelPress);
+    muteBtn.addEventListener("pointercancel", cancelPress);
+    // 長押ししても、パソコンの右クリックメニューのようなものが出ないようにする
+    muteBtn.addEventListener("contextmenu", function (e) {
+      e.preventDefault();
+    });
+
+    // iPhone や iPad では、指を「離したとき」でないと音の準備ができないことがあるので、ここでも準備する
+    document.addEventListener("pointerup", function () {
+      getAudio();
+    });
+
+    // =====================================================
+    // 画面のどこかに指（またはマウス）がふれた瞬間の動き
+    // =====================================================
+    document.addEventListener("pointerdown", function (e) {
+      // 音を消すボタンを触ったときは、車は動かさない
+      if (e.target.closest("#muteBtn")) return;
+      // 手のひらで何本もの指が同時にふれても、1本目の指だけに反応する
+      if (!e.isPrimary) return;
+      if (busy) return; // 画面の外を回っているあいだは何もしない
+
+      stopWaiting();
+
+      // 1回に進む距離：画面の広さに合わせて、だいたい TAPS_TO_END 回で右はしに着くようにする
+      const step = Math.max(40, (window.innerWidth - carWidth() - START_X) / TAPS_TO_END);
+      const nextX = x + step;
+
+      // 「+ 1」は、小数の計算でごくわずかにはみ出したときも「おさまる」と判定するためのゆとり
+      if (nextX + carWidth() <= window.innerWidth + 1) {
+        // まだ画面の中におさまる → ふつうに進む（アームもガシャン）
+        moveTo(nextX, MOVE_TIME);
+        scoopArm();
+        playTapSound();
+        startWaitingLater(WAIT_TIME);
+      } else {
+        // 右はしに着いた → 右の外まで走りぬけて、左の外から戻ってくる
+        busy = true;
+
+        // ① 右の外へ走りぬける（距離に合わせた時間で）
+        const exitX = window.innerWidth + 20;
+        const exitTime = timeFor(exitX - x, step);
+        moveTo(exitX, exitTime);
+        scoopArm();
+        playDriveSound(exitTime / 1000);           // 「ブーーン」（ミリ秒 → 秒に直して渡す）
+
+        setTimeout(function () {
+          // ② 見えないところで左の外へ移す
+          const enterFromX = -carWidth() - 20;
+          moveTo(enterFromX, 0);
+
+          // ③ 左からスーッと入ってくる（距離に合わせた時間で）
+          const enterTime = timeFor(START_X - enterFromX, step);
+          moveTo(START_X, enterTime);
+
+          setTimeout(function () {
+            playArriveSound();                       // 「ピポッ♪」
+            busy = false;                            // ④ またさわれるようにする
+            startWaitingLater(WAIT_TIME);
+          }, enterTime);
+        }, exitTime);
+      }
+    });
+
+    // 画面を回転させたり、ウィンドウの大きさを変えたりしたとき
+    window.addEventListener("resize", function () {
+      updateSize();
+      // 画面からはみ出していたら、見える位置に戻す
+      if (!busy && x + carWidth() > window.innerWidth) {
+        moveTo(Math.max(START_X, window.innerWidth - carWidth()), 0);
+      }
+    });
+
+    // 最初の準備
+    updateSize();
+    moveTo(START_X, 0);
+  </script>
+
+</body>
+</html>
