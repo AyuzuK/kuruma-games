@@ -41,13 +41,6 @@
       color: #333;
     }
 
-    /* 途中版の印（大人向け。⑦ の本番の公開で外す） */
-    .draft-note {
-      margin: -16px 0 0;
-      font-size: 14px;
-      color: #555;
-    }
-
     /* ===== ゲームを選ぶボタン =====
        おもちゃのブロックのように、下に濃い影を付けて「押せそう」に見せる */
     .game-button {
@@ -57,21 +50,32 @@
       height: 240px;
       border: 6px solid #333;
       border-radius: 32px;
-      background: #8fd3ff;           /* ボタンの中の空 */
+      /* ボタンの中の空（ゲームの空と同じ、上が濃く下がうすいグラデーション） */
+      background: linear-gradient(#8ccbf0 0%, #d8f0ff 100%);
       box-shadow: 0 10px 0 #333;     /* 下の影 */
       overflow: hidden;
       animation: purupuru 1.2s ease-in-out infinite; /* ゆっくり揺れて「さわってね」と伝える */
     }
 
-    /* ボタンの中の地面 */
+    /* ボタンの中の地面（ゲームと同じ色の土）。
+       上のふちのすぐ下を少し濃くして、ゲームの地面と同じ見え方にする */
     .game-button .ground {
       position: absolute;
       left: 0;
       right: 0;
       bottom: 0;
       height: 50px;
-      background: #c8a165;
-      border-top: 6px solid #7cc254;
+      background: linear-gradient(#b07c51 0, #b07c51 5px, #c48d5c 5px);
+    }
+    /* 土の上の草地（ゲームの手前の草地と同じ黄緑。下のふちは少し濃い緑） */
+    .game-button .ground::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 100%;                  /* 土のすぐ上に置く */
+      height: 16px;
+      background: linear-gradient(#a8d465 0, #a8d465 12px, #86bd52 12px);
     }
 
     /* 押したときに、影の分だけ沈む */
@@ -92,138 +96,232 @@
       .game-button { animation: none; }
     }
 
-    /* ===== ボタンの中の小さなショベルカー（ゲームと同じ作り） ===== */
-    .shovel {
-      position: absolute;
-      left: 22px;
-      bottom: 50px;                  /* 地面の上に乗せる */
-      width: 260px;
-      height: 200px;
-    }
-
-    .track {
-      position: absolute;
-      left: 10px;
-      bottom: 0;
-      width: 180px;
-      height: 45px;
-      background: #444;
-      border-radius: 25px;
-    }
-
-    .wheel {
-      position: absolute;
-      bottom: 8px;
-      width: 30px;
-      height: 30px;
-      background: #999;
-      border: 4px solid #222;
-      border-radius: 50%;
-      box-sizing: border-box;
-    }
-    .wheel1 { left: 20px; }
-    .wheel2 { left: 75px; }
-    .wheel3 { left: 130px; }
-
-    .body {
-      position: absolute;
-      left: 20px;
-      bottom: 45px;
-      width: 160px;
-      height: 55px;
-      background: #ffc400;
-      border: 4px solid #333;
-      border-radius: 8px;
-      box-sizing: border-box;
-    }
-
-    .cab {
+    /* ===== ボタンの中のショベルカー（ゲームの絵を、そのまま 0.8 倍にして置く） =====
+       ゲームの絵は 横300 × 縦220。0.8 倍で 横240 × 縦176 になる。
+       横：絵の中で色がある部分（x 2〜295 くらい）が、ボタンのまん中にくるように、左から 30px。
+       縦：キャタピラの下（絵の y 215）が、土の上のふち（ボタンの下から 50px）より
+           6px だけ下にくるようにして、地面に乗って見せる。
+           そのため、絵の下はしは、ボタンの下から 40px（= 50 − 6 − 5×0.8 ≒ 40）。
+       このとき、アームのいちばん上はボタンの上から 27px くらい、バケットの右はしは
+       左から 265px くらい（ボタンの中は 300px）なので、丸い角にもかからない */
+    .shovel-svg {
       position: absolute;
       left: 30px;
-      bottom: 96px;
-      width: 75px;
-      height: 70px;
-      background: #ffc400;
-      border: 4px solid #333;
-      border-radius: 10px 10px 0 0;
-      box-sizing: border-box;
-    }
-
-    .window {
-      position: absolute;
-      left: 12px;
-      top: 10px;
-      width: 45px;
-      height: 32px;
-      background: #dff3ff;
-      border: 3px solid #333;
-      border-radius: 6px;
-      box-sizing: border-box;
-    }
-
-    .arm {
-      position: absolute;
-      left: 140px;
-      bottom: 110px;
-      width: 100px;
-      height: 22px;
-      background: #ffc400;
-      border: 4px solid #333;
-      border-radius: 10px;
-      box-sizing: border-box;
-      transform-origin: left center;
-      transform: rotate(-25deg);
-    }
-
-    .arm2 {
-      position: absolute;
-      left: 218px;
-      bottom: 70px;
-      width: 22px;
-      height: 90px;
-      background: #ffc400;
-      border: 4px solid #333;
-      border-radius: 10px;
-      box-sizing: border-box;
-    }
-
-    .bucket {
-      position: absolute;
-      left: 205px;
       bottom: 40px;
-      width: 50px;
-      height: 40px;
-      background: #777;
-      border: 4px solid #333;
-      border-radius: 0 0 25px 25px;
-      box-sizing: border-box;
+      width: 240px;
+      height: 176px;
+      display: block;
     }
   </style>
 </head>
 <body>
 
   <h1 class="title">はたらくくるま</h1>
-  <!-- 途中版の印。⑦ の本番の公開で、この行を消す -->
-  <p class="draft-note">とちゅうの ばん（11/20）</p>
 
   <!-- ショベルカーのゲームへのボタン。
        ファイルをダブルクリックで開いたときも動くように、index.html まで書く -->
   <a class="game-button" id="shovelGame" href="games/01-shovel/index.html" aria-label="しょべるかー">
     <div class="ground"></div>
-    <div class="shovel">
-      <div class="arm"></div>
-      <div class="arm2"></div>
-      <div class="bucket"></div>
-      <div class="track">
-        <div class="wheel wheel1"></div>
-        <div class="wheel wheel2"></div>
-        <div class="wheel wheel3"></div>
-      </div>
-      <div class="body"></div>
-      <div class="cab">
-        <div class="window"></div>
-      </div>
-    </div>
+    <!-- ショベルカーの絵（ゲームの中の絵を写したもの。この画面では動かさない）。
+         座標の枠は 横300 × 縦220（左上が 0,0、y は下向きに増える）。
+         この画面の中で名前（id）がぶつからないように、id の先頭に top- を付けてある。
+         重なる順番（奥 → 手前）：地面の影 → 奥のキャタピラ → 旋回台 → 煙突 → アーム → 運転席・車体 → 手前のキャタピラ -->
+    <svg class="shovel-svg" viewBox="0 0 300 220" aria-hidden="true" focusable="false">
+      <defs>
+        <!-- 車体・運転席・バケットの形で切りぬいて、明るいところ・影を中だけに塗るための型 -->
+        <clipPath id="top-bodyClip"><rect x="15" y="112" width="130" height="48" rx="14"/></clipPath>
+        <clipPath id="top-cabClip"><path d="M 34 115 L 34 46 Q 34 28 52 28 L 104 28 Q 119 28 121 43 L 126 115 Z"/></clipPath>
+        <clipPath id="top-bucketClip"><path d="M -8 -4 L 38 -6 Q 62 10 58 34 Q 54 60 26 64 L 2 64 Q -6 64 -6 58 Q 12 28 -8 -4 Z"/></clipPath>
+        <!-- キャタピラの形（カプセル形） -->
+        <path id="top-trackShape" d="M 35 165 L 106.46 165 A 25 25 0 0 1 106.46 215 L 35 215 A 25 25 0 0 1 35 165 Z"/>
+      </defs>
+
+      <g stroke="#5a3d1e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+
+        <!-- 地面の影（ぼんやりした横長の楕円） -->
+        <ellipse cx="92" cy="215" rx="90" ry="7" fill="#8a5a38" opacity="0.35" stroke="none"/>
+
+        <!-- ===== 奥のキャタピラ（手前より右に 22px・上に 7px ずらし、少し暗く） ===== -->
+        <g transform="translate(22 -7)">
+          <!-- でこぼこ（太い点線） -->
+          <path d="M 35 165 L 106.46 165 A 25 25 0 0 1 106.46 215 L 35 215 A 25 25 0 0 1 35 165 Z"
+                fill="none" stroke="#2c2c2c" stroke-width="11"
+                stroke-dasharray="6 6" stroke-linecap="butt"/>
+          <use href="#top-trackShape" fill="#3a3a3a" stroke="#3a2614"/>
+          <!-- 右はしの車輪（見えるのは右がわだけ） -->
+          <g transform="translate(106.46 190)">
+            <circle r="18" fill="#5e5e5e" stroke="#3a2614" stroke-width="2.5"/>
+            <circle r="7" fill="#4a4a4a" stroke="none"/>
+            <g fill="#7a7a7a" stroke="none">
+              <circle cx="0" cy="-11" r="2.2"/>
+              <circle cx="9.5" cy="5.5" r="2.2"/>
+              <circle cx="-9.5" cy="5.5" r="2.2"/>
+            </g>
+          </g>
+        </g>
+
+        <!-- ===== 旋回台（車体の下の暗い台） ===== -->
+        <rect x="36" y="150" width="96" height="18" rx="5" fill="#4a4a4a"/>
+
+        <!-- ===== 煙突（運転席の左どなり） ===== -->
+        <rect x="20" y="92" width="9" height="24" rx="2.5" fill="#4a4a4a"/>
+        <rect x="18" y="88" width="13" height="7" rx="3.5" fill="#4a4a4a"/>
+
+        <!-- ===== アーム（ブーム > スティック > バケット の入れ子。すくう前の、止まった形） =====
+             それぞれ「関節の場所へ translate した <g>」の中で、関節が (0, 0) になるように描いてある -->
+        <!-- ブームの付け根の関節 (120, 120) -->
+        <g transform="translate(120 120)">
+          <!-- 油圧シリンダー2（ブームの上がわ）。ブームより先に描いて、背中から少しのぞかせる -->
+          <line x1="26.2" y1="-91.9" x2="46.3" y2="-113.4" stroke-width="5"/>
+          <line x1="26.2" y1="-91.9" x2="46.3" y2="-113.4" stroke="#c8ccd0" stroke-width="2.5"/>
+          <line x1="9.8" y1="-74.4" x2="29.9" y2="-95.9" stroke-width="8"/>
+          <line x1="9.8" y1="-74.4" x2="29.9" y2="-95.9" stroke="#4a4a4a" stroke-width="5"/>
+
+          <!-- ブーム：付け根 (0,0) → 上に「く」の字に折れる (20,-68) → 先 (55,-100) -->
+          <path fill="#f7c33c"
+                d="M 11.5 3.4 L 28 -56.2 Q 29.7 -62 34.1 -66 L 61.1 -93.4 A 9 9 0 0 0 48.9 -106.6 L 18.5 -81.5 Q 10.3 -74.1 7.2 -63.4 L -11.5 -3.4 A 12 12 0 0 0 11.5 3.4 Z"/>
+          <!-- ブームの明るいところ（背中がわ） -->
+          <path d="M -1.8 -14.5 L 12.4 -62 Q 14.7 -71.3 22 -77.5 L 45 -98" fill="none" stroke="#ffd96b" stroke-width="4"/>
+          <!-- シリンダー2の付け根のピン -->
+          <circle cx="9.8" cy="-74.4" r="3.5" fill="#ffd96b" stroke-width="2"/>
+
+          <!-- 油圧シリンダー1（ブームの下がわ）。下のはしは車体の裏にかくれる -->
+          <line x1="22.6" y1="-13" x2="28" y2="-50" stroke-width="5"/>
+          <line x1="22.6" y1="-13" x2="28" y2="-50" stroke="#c8ccd0" stroke-width="2.5"/>
+          <line x1="18" y1="18" x2="23.6" y2="-20" stroke-width="8"/>
+          <line x1="18" y1="18" x2="23.6" y2="-20" stroke="#4a4a4a" stroke-width="5"/>
+          <circle cx="28" cy="-50" r="3.5" fill="#ffd96b" stroke-width="2"/>
+
+          <!-- スティックの関節（ブームの先）(55, -100) -->
+          <g transform="translate(55 -100)">
+            <!-- スティック：上のはし → バケットの付け根 (55, 85) -->
+            <path fill="#f7c33c"
+                  d="M -0.7 -18.6 L 61.7 80.7 A 8 8 0 0 1 48.3 89.4 L -16.7 -8.3 A 9.5 9.5 0 0 1 -0.7 -18.6 Z"/>
+            <path d="M 3.1 -4.4 L 50.5 69.8" fill="none" stroke="#ffd96b" stroke-width="3.5"/>
+
+            <!-- 油圧シリンダー3（スティックの外がわ） -->
+            <line x1="36.2" y1="33.8" x2="64.4" y2="77.4" stroke-width="5"/>
+            <line x1="36.2" y1="33.8" x2="64.4" y2="77.4" stroke="#c8ccd0" stroke-width="2.5"/>
+            <line x1="15.5" y1="1.9" x2="40" y2="39.7" stroke-width="8"/>
+            <line x1="15.5" y1="1.9" x2="40" y2="39.7" stroke="#4a4a4a" stroke-width="5"/>
+            <circle cx="15.5" cy="1.9" r="3.5" fill="#ffd96b" stroke-width="2"/>
+
+            <!-- バケットの関節（スティックの先）(55, 85) -->
+            <g transform="translate(55 85)">
+              <!-- バケットの上の小さなつなぎの板 -->
+              <rect x="-4" y="-12" width="32" height="10" rx="5" fill="#f7c33c"/>
+              <circle cx="22" cy="-7" r="3" fill="#ffd96b" stroke-width="2"/>
+              <!-- バケット：口は左向き。丸みのある1枚の刃先 -->
+              <path fill="#f7c33c"
+                    d="M -8 -4 L 38 -6 Q 62 10 58 34 Q 54 60 26 64 L 2 64 Q -6 64 -6 58 Q 12 28 -8 -4 Z"/>
+              <g clip-path="url(#top-bucketClip)" stroke="none">
+                <ellipse cx="30" cy="66" rx="42" ry="12" fill="#e0a52a"/>
+                <path d="M -6 58 Q 12 28 -8 -4" fill="none" stroke="#e0a52a" stroke-width="10"/>
+                <path d="M 40 -2 Q 58 12 55 32" fill="none" stroke="#ffd96b" stroke-width="4"/>
+              </g>
+              <path fill="none"
+                    d="M -8 -4 L 38 -6 Q 62 10 58 34 Q 54 60 26 64 L 2 64 Q -6 64 -6 58 Q 12 28 -8 -4 Z"/>
+              <!-- バケットの関節のピン -->
+              <circle r="5" fill="#ffd96b" stroke-width="2.5"/>
+              <circle r="1.6" fill="#5a3d1e" stroke="none"/>
+            </g>
+
+            <!-- スティックの関節のピン -->
+            <circle r="6" fill="#ffd96b" stroke-width="2.5"/>
+            <circle r="2" fill="#5a3d1e" stroke="none"/>
+          </g>
+
+          <!-- ブームの付け根のピン（車体の裏にかくれる） -->
+          <circle r="5" fill="#ffd96b" stroke-width="2.5"/>
+          <circle r="1.6" fill="#5a3d1e" stroke="none"/>
+        </g>
+
+        <!-- ===== 運転席 ===== -->
+        <path fill="#f7c33c" d="M 34 115 L 34 46 Q 34 28 52 28 L 104 28 Q 119 28 121 43 L 126 115 Z"/>
+        <g clip-path="url(#top-cabClip)" stroke="none">
+          <rect x="30" y="22" width="100" height="12" fill="#ffd96b"/>  <!-- 屋根の明るいところ -->
+        </g>
+        <path fill="none" d="M 34 115 L 34 46 Q 34 28 52 28 L 104 28 Q 119 28 121 43 L 126 115 Z"/>
+        <!-- 横の面と前の面のさかい目 -->
+        <path d="M 101 30 L 101 112" fill="none" stroke-width="1.5"/>
+        <!-- 横の窓 -->
+        <rect x="41" y="37" width="53" height="43" rx="7" fill="#bfe4f5" stroke-width="2.5"/>
+        <!-- 前の窓 -->
+        <path d="M 104 37 L 114 37 Q 118 37 118.5 41 L 121 76 Q 121.3 80 117 80 L 104 80 Z" fill="#bfe4f5" stroke-width="2.5"/>
+        <!-- ガラスに見せる、白いななめの線 -->
+        <g stroke="#ffffff" stroke-width="4" opacity="0.7" fill="none">
+          <path d="M 50 74 L 65 44"/>
+          <path d="M 61 74 L 76 44"/>
+          <path d="M 108 72 L 114 46"/>
+        </g>
+        <!-- ドアの線と取っ手 -->
+        <path d="M 39 86 L 39 110" fill="none" stroke-width="1.5"/>
+        <rect x="84" y="90" width="12" height="4" rx="2" fill="#5a3d1e" stroke="none"/>
+
+        <!-- ===== 車体（下の箱） ===== -->
+        <rect x="15" y="112" width="130" height="48" rx="14" fill="#f7c33c" stroke="none"/>
+        <g clip-path="url(#top-bodyClip)" stroke="none">
+          <rect x="15" y="112" width="130" height="7" fill="#ffd96b"/>   <!-- 上の面（明るい） -->
+          <rect x="15" y="151" width="130" height="9" fill="#e0a52a"/>   <!-- 下の面（影） -->
+        </g>
+        <rect x="15" y="112" width="130" height="48" rx="14" fill="none"/>
+        <!-- 前の面とのさかい目 -->
+        <path d="M 121 115 L 121 157" fill="none" stroke-width="1.5"/>
+        <!-- 後ろの通気口（横線3本） -->
+        <g stroke-width="3.5" fill="none">
+          <path d="M 24 125 L 38 125"/>
+          <path d="M 24 132 L 38 132"/>
+          <path d="M 24 139 L 38 139"/>
+        </g>
+        <!-- 前のライト2つ -->
+        <circle cx="128" cy="140" r="5" fill="#fff3c4" stroke-width="2"/>
+        <circle cx="139" cy="140" r="5" fill="#fff3c4" stroke-width="2"/>
+
+        <!-- ===== 手前のキャタピラ ===== -->
+        <!-- でこぼこ（太い点線。内がわ半分は、上のカプセルにかくれる） -->
+        <path d="M 35 165 L 106.46 165 A 25 25 0 0 1 106.46 215 L 35 215 A 25 25 0 0 1 35 165 Z"
+              fill="none" stroke="#333333" stroke-width="11"
+              stroke-dasharray="6 6" stroke-linecap="butt"/>
+        <use href="#top-trackShape" fill="#454545" stroke="#3a2614"/>
+
+        <!-- 大きい車輪（左右） -->
+        <g transform="translate(35 190)">
+          <circle r="18" fill="#6e6e6e" stroke="#3a2614" stroke-width="2.5"/>
+          <circle r="7" fill="#555555" stroke="none"/>
+          <g fill="#8a8a8a" stroke="none">
+            <circle cx="0" cy="-11" r="2.2"/>
+            <circle cx="9.5" cy="5.5" r="2.2"/>
+            <circle cx="-9.5" cy="5.5" r="2.2"/>
+          </g>
+        </g>
+        <g transform="translate(106.46 190)">
+          <circle r="18" fill="#6e6e6e" stroke="#3a2614" stroke-width="2.5"/>
+          <circle r="7" fill="#555555" stroke="none"/>
+          <g fill="#8a8a8a" stroke="none">
+            <circle cx="0" cy="-11" r="2.2"/>
+            <circle cx="9.5" cy="5.5" r="2.2"/>
+            <circle cx="-9.5" cy="5.5" r="2.2"/>
+          </g>
+        </g>
+
+        <!-- 小さいローラー3つ -->
+        <g transform="translate(58 201)">
+          <circle r="5.5" fill="#5e5e5e" stroke="#3a2614" stroke-width="2"/>
+          <circle cx="0" cy="-2.6" r="1.4" fill="#8a8a8a" stroke="none"/>
+        </g>
+        <g transform="translate(71 201)">
+          <circle r="5.5" fill="#5e5e5e" stroke="#3a2614" stroke-width="2"/>
+          <circle cx="0" cy="-2.6" r="1.4" fill="#8a8a8a" stroke="none"/>
+        </g>
+        <g transform="translate(84 201)">
+          <circle r="5.5" fill="#5e5e5e" stroke="#3a2614" stroke-width="2"/>
+          <circle cx="0" cy="-2.6" r="1.4" fill="#8a8a8a" stroke="none"/>
+        </g>
+
+        <!-- ローラーの上の、黄色い細長いカバー -->
+        <rect x="46" y="178" width="50" height="10" rx="5" fill="#f7c33c" stroke-width="2.5"/>
+      </g>
+    </svg>
   </a>
 
   <script>
