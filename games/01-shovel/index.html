@@ -193,13 +193,14 @@
     }
 
     /* ===== ショベルカー全体 =====
-       3つの箱を重ねて、役割を分けています。
+       4つの箱を重ねて、役割を分けています。
          .shovel        … 左右の「位置」を受け持つ（右に動く）
          .shovel-size   … 「大きさ」を受け持つ（小さい画面では縮める）
+         .shovel-hop    … 「はねる」を受け持つ（走りぬけ中にさわると、1回ぴょんとはねる）
          .shovel-wobble … 「ぷるぷる」を受け持つ（待っているあいだ揺れる）
        1つの箱で全部やろうとすると、動きどうしがぶつかるためです。
-       （次の工程の「指マーク」は、.shovel の中で .shovel-wobble の外に置く予定。
-         そうすると車といっしょに左右に動き、ぷるぷるの揺れは受けない） */
+       指マーク（.finger-hint）は、.shovel の中で .shovel-size の外に置いています。
+       そうすると車といっしょに左右に動き、ぷるぷるの揺れや、縮める・はねる動きは受けません */
     .shovel {
       position: absolute;
       left: 0;
@@ -211,6 +212,7 @@
     }
 
     .shovel-size,
+    .shovel-hop,
     .shovel-wobble {
       position: absolute;
       inset: 0;                      /* 親の箱いっぱいに広げる */
@@ -246,6 +248,63 @@
       50%  { transform: translateY(0)    rotate(0deg); }
       75%  { transform: translateY(-4px) rotate(1.5deg); }
       100% { transform: translateY(0)    rotate(0deg); }
+    }
+
+    /* ===== 走りぬけ中にさわったときの「ぴょん」 =====
+       .hop が付くと、0.3秒で1回だけ上にはねて、元の高さに戻る。
+       位置の箱（.shovel）ではなく、この層を動かすので、走りぬけの移動や戻る時刻は変わらない。
+       「その場にとどまる」設定（fill-mode）を付けていないので、終わると必ず元の高さに戻る。
+       はねる高さ 12px は、縮める層の内がわなので、画面では 6〜12px になる（縮める率 0.5〜1） */
+    .shovel-hop.hop {
+      animation: pyon 0.3s ease-out;
+    }
+    @keyframes pyon {
+      0%   { transform: translateY(0); }
+      40%  { transform: translateY(-12px); }  /* いちばん高いところ */
+      100% { transform: translateY(0); }
+    }
+
+    /* ===== 指マーク「さわってね」 =====
+       運転席の上に出す、下向きの指。.shovel の中にあるので、車といっしょに左右に動く。
+       車の大きさ（縮める率）は JavaScript が --s に入れてくれるので、
+       その値を使って、運転席の真上にくるように場所を決めている。
+         横：運転席の横の窓のまん中（車の絵の x = 68 くらい）に、指先がくるように
+         縦：運転席の屋根（車の絵の下から 192 のところ）に、指先がちょうど乗るように
+       ただし、高さの低い画面（スマホ横向きでアドレスバーが出ているときなど）では、
+       そのままだと上の文字「さわると うごくよ！」に届いてしまう。そのときは JavaScript の
+       placeHint() が、--hs（指マークを小さくする率、0.75 まで）と --hd（下げる量）を入れてくれる */
+    .finger-hint {
+      position: absolute;
+      left: calc(68px * var(--s, 1) - 20px * var(--hs, 1));  /* 20px = 指マークの横幅 40px の半分 */
+      bottom: calc(192px * var(--s, 1) - var(--hd, 0px));
+      width: calc(40px * var(--hs, 1));
+      height: calc(48px * var(--hs, 1));  /* JavaScript の HINT_HEIGHT と同じにする */
+      z-index: 1;                    /* 指先が屋根に重なったとき、車の絵より手前に出す */
+      pointer-events: none;         /* 指マークがタッチを吸わないように（上をさわっても車が動く） */
+      /* ふだんは見えない。消えるときは 0.4秒かけて、ふわっとうすくなる
+         （うすくなりきってから visibility も hidden にする） */
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.4s ease, visibility 0s linear 0.4s;
+    }
+    /* .show が付いているあいだ見える。出るときも 0.4秒かけて、ふわっと */
+    .finger-hint.show {
+      opacity: 1;
+      visibility: visible;
+      transition: opacity 0.4s ease, visibility 0s;
+    }
+    .finger-hint svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      /* ゆっくり上下（1往復 1秒）。指先が屋根を「ちょん」とつつくように、下へ 8px 動く。
+         上には動かないので、上の文字に近づくことはない */
+      animation: tsuntsun 1s ease-in-out infinite;
+    }
+    @keyframes tsuntsun {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(8px); }
     }
 
     /* ===== SVG の部品を回すときの決まり =====
@@ -307,10 +366,12 @@
       100% { transform: rotate(0deg); }
     }
 
-    /* ===== 動きを減らす設定の端末では、ぷるぷると雲の流れを止める ===== */
+    /* ===== 動きを減らす設定の端末では、ぷるぷる・雲の流れ・指マークの上下を止める =====
+       （指マーク自体は表示する。走りぬけ中の「ぴょん」は、さわったときの小さな返事なので残す） */
     @media (prefers-reduced-motion: reduce) {
       .shovel.waiting .shovel-wobble { animation: none; }
       .clouds { animation: none; }
+      .finger-hint svg { animation: none; }
     }
 
     /* ===== 音を消すボタン（右上） ===== */
@@ -547,7 +608,55 @@
 
   <!-- ===== ショベルカー本体 ===== -->
   <div class="shovel waiting" id="shovel">
+
+    <!-- 指マーク「さわってね」（運転席の上。下向きの人さし指）。
+         .show が付いているあいだ見える。ページを開いたときは見えている -->
+    <div class="finger-hint show" id="fingerHint" aria-hidden="true">
+      <!-- 手の絵（横 40 × 縦 48）。右手の甲をこちらに向けて、人さし指で下をさしている形。
+           ・上に青いそで口を付けて「手首から先の手」だと分かるようにする
+           ・人さし指は、まん中より少し左。長くはっきり。指先は下（y 47）
+           ・にぎった指（中指・薬指・小指）は、人さし指の右に、上から下へ3本ならべる
+           ・親指は左がわで、ななめ下を向く
+           ・色は空の白い雲とまぎれないように、クリーム色の肌＋こげ茶のふちどり。
+             1つ1つの部品にふちどりがあるので、指どうしの境目の線が内がわにも見える
+           ・顔に見えないように、つめ・しわなどの小さな線は描かない -->
+      <svg viewBox="0 0 40 48" focusable="false">
+        <defs>
+          <!-- 白いふち用の形（手全体のかげ絵）。背景から浮いて見えるように、うしろに白く太く敷く -->
+          <g id="handHalo">
+            <rect x="12" y="1" width="24" height="8" rx="3"/>
+            <ellipse cx="8" cy="20" rx="4.5" ry="8" transform="rotate(25 8 20)"/>
+            <rect x="10" y="7" width="27" height="20" rx="5"/>
+            <rect x="21" y="19" width="15" height="7.5" rx="3.75"/>
+            <rect x="21" y="26" width="14" height="7" rx="3.5"/>
+            <rect x="21" y="32.5" width="12" height="6.5" rx="3.25"/>
+            <rect x="13" y="18" width="9" height="29" rx="4.5"/>
+          </g>
+        </defs>
+        <!-- 白いふち（うすい白で、手のまわりを少し太らせる） -->
+        <use href="#handHalo" fill="#ffffff" stroke="#ffffff" stroke-width="5" stroke-linejoin="round" opacity="0.9"/>
+
+        <!-- ここから手。うしろの部品から順に描く（あとに描いたものが手前） -->
+        <g stroke="#5a3d1e" stroke-width="2" stroke-linejoin="round">
+          <!-- 親指（左がわ。てのひらのうしろから、ななめ下へ） -->
+          <ellipse cx="8" cy="20" rx="4.5" ry="8" transform="rotate(25 8 20)" fill="#ffe2bd"/>
+          <!-- 手の甲 -->
+          <rect x="10" y="7" width="27" height="20" rx="5" fill="#ffe2bd"/>
+          <!-- そで口（手首） -->
+          <rect x="12" y="1" width="24" height="8" rx="3" fill="#4f8fd6"/>
+          <!-- にぎった指：中指・薬指・小指（下ほど短い） -->
+          <rect x="21" y="19" width="15" height="7.5" rx="3.75" fill="#ffd6a8"/>
+          <rect x="21" y="26" width="14" height="7" rx="3.5" fill="#ffd6a8"/>
+          <rect x="21" y="32.5" width="12" height="6.5" rx="3.25" fill="#ffd6a8"/>
+          <!-- 人さし指（いちばん手前。下をさす） -->
+          <rect x="13" y="18" width="9" height="29" rx="4.5" fill="#ffe2bd"/>
+        </g>
+      </svg>
+    </div>
+
     <div class="shovel-size" id="shovelSize">
+      <!-- 走りぬけ中にさわったときに「ぴょん」とはねる層 -->
+      <div class="shovel-hop" id="shovelHop">
       <div class="shovel-wobble">
         <!-- ショベルカーの絵。座標の枠は 横300 × 縦220（左上が 0,0、y は下向きに増える）。
              重なる順番（奥 → 手前）：地面の影 → 奥のキャタピラ → 旋回台 → 煙突 → アーム → 運転席・車体 → 手前のキャタピラ -->
@@ -780,6 +889,7 @@
           </g>
         </svg>
       </div>
+      </div><!-- /.shovel-hop -->
     </div>
   </div>
 
@@ -792,6 +902,11 @@
     const MOVE_TIME = 600;   // ふつうの1歩にかかる時間（ミリ秒）
     const MAX_MOVE_TIME = 1500; // 画面の外を回るときの1回の移動の上限（ミリ秒）。待ち時間が長くなりすぎないように
     const WAIT_TIME = 1500;  // さわらなくなってから、ぷるぷるを始めるまでの時間（ミリ秒）
+    const HINT_TIME = 5000;  // 最後にさわってから、指マークをもう一度出すまでの時間（ミリ秒）
+    const HORN_GAP = 200;    // クラクション「プッ」を、次に鳴らせるまでの間隔（ミリ秒）
+    const HINT_HEIGHT = 48;  // 指マークの、もともとの高さ（ピクセル）。CSS の .finger-hint と同じ
+    const HINT_MIN_SCALE = 0.75; // 低い画面で、指マークをどこまで小さくしてよいか（0.75 = 4分の3）
+    const HINT_GAP = 6;      // 上の文字と指マークのあいだに、最低これだけあける（ピクセル）
 
     // ----- 音の設定 -----
     const VOLUME = 0.5;          // 全体の音量（0〜1。0.5 = 最大の半分くらい）
@@ -803,18 +918,49 @@
     const shovelSize = document.getElementById("shovelSize");
     const armGroup = document.getElementById("armGroup");   // SVG の中の、アーム全体のグループ
     const muteBtn = document.getElementById("muteBtn");
+    const shovelHop = document.getElementById("shovelHop");   // 「ぴょん」とはねる層
+    const fingerHint = document.getElementById("fingerHint"); // 指マーク
+    const message = document.querySelector(".message");       // 上の文字「さわると うごくよ！」
 
-    let x = START_X;       // いまの位置
+    let x = START_X;      // いまの位置
     let scale = 1;         // いまの大きさ（1 = もとの大きさ）
     let busy = false;      // 画面の外を回っているあいだは true（そのあいだはさわっても動かない）
     let waitTimer = null;  // ぷるぷるを始めるタイマー
     let movingTimer = null; // 車輪の回転を止めるタイマー
+    let hintTimer = null;   // 指マークをもう一度出すタイマー
 
     // 画面の大きさに合わせて、ショベルカーの大きさを決める
     function updateSize() {
       scale = Math.min(1, window.innerWidth / 600, window.innerHeight / 500);
       scale = Math.max(0.5, scale); // 小さくなりすぎないように
       shovelSize.style.transform = "scale(" + scale + ")";
+      // 指マークの場所の計算（CSS の .finger-hint）でも使えるように、縮める率を渡しておく
+      shovel.style.setProperty("--s", scale);
+      placeHint();
+    }
+
+    // 指マークが、上の文字「さわると うごくよ！」に届かないように、大きさと高さを決める。
+    // 指マークは上下に動くが、下（屋根の方）にしか動かないので、止まっているときの上のはしだけ見ればよい。
+    //   ① ふつうは、運転席の屋根の上に、もとの大きさで出す
+    //   ② 屋根から文字までのすき間が足りないときは、まず小さくする（HINT_MIN_SCALE まで）
+    //   ③ それでも足りないときは、足りないぶんだけ下げる（運転席に少し重なる）
+    // こうすると、どんなに低い画面でも、指マークは消えずに、文字の下に出る
+    function placeHint() {
+      const textBottom = message.getBoundingClientRect().bottom;  // 文字の下のはし（画面の上から）
+      // 地面の上のふち（画面の上から）。#shovel の下のはしが、地面の上のふちに合わせてある
+      const groundTop = shovel.getBoundingClientRect().bottom;
+      const roofTop = groundTop - 192 * scale;                     // 運転席の屋根（画面の上から）
+      const room = roofTop - (textBottom + HINT_GAP);              // 屋根の上で、指マークに使える高さ
+
+      let hintScale = 1;  // 指マークを小さくする率
+      let drop = 0;       // 指マークを下げる量（ピクセル）
+      if (room < HINT_HEIGHT) {
+        hintScale = Math.max(HINT_MIN_SCALE, room / HINT_HEIGHT);   // ② 小さくする
+        const h = HINT_HEIGHT * hintScale;
+        if (room < h) drop = h - room;                              // ③ 下げる
+      }
+      fingerHint.style.setProperty("--hs", hintScale);
+      fingerHint.style.setProperty("--hd", drop + "px");
     }
 
     // いまの見た目の横幅
@@ -871,6 +1017,33 @@
         shovel.classList.add("waiting");
       }, delay);
     }
+
+    // 指マークを消す（もう一度出すタイマーも止める）
+    function hideHint() {
+      clearTimeout(hintTimer);
+      fingerHint.classList.remove("show");
+    }
+
+    // HINT_TIME（5秒）たったら、指マークをもう一度出す。
+    // 呼ぶたびに数え直す（前のタイマーは止める）
+    function showHintLater() {
+      clearTimeout(hintTimer);
+      hintTimer = setTimeout(function () {
+        if (!busy) fingerHint.classList.add("show"); // 念のため、走りぬけ中は出さない
+      }, HINT_TIME);
+    }
+
+    // 走りぬけ中にさわったとき：車を「ぴょん」と1回はねさせる。
+    // 連打しても、毎回 最初からはね直す（アームの「ガシャン」と同じやり方）
+    function hop() {
+      shovelHop.classList.remove("hop");
+      shovel.offsetWidth;                // ブラウザに一度反映させるおまじない（やり直せるように）
+      shovelHop.classList.add("hop");
+    }
+    // はね終わったら印を外す（外さなくても元の高さには戻るが、テストで見分けやすいように）
+    shovelHop.addEventListener("animationend", function (e) {
+      if (e.target === shovelHop) shovelHop.classList.remove("hop");
+    });
 
     // =====================================================
     // 音（ブラウザの機能 Web Audio API で、その場で音を作る）
@@ -976,21 +1149,88 @@
       src.stop(start + length + 0.05);
     }
 
-    // 触ったときの音：エンジン「ブッ」＋ アームの「ガシャン」
+    // エンジンの「ブロロッ」を作る部品（聞きくらべのページ docs/音の聞きくらべ.html と同じ）
+    // 「ブーン」（sawtooth ＋ やわらかくするフィルター）の大きさを、1秒に何回も細かく上下させて、
+    // 「ゴロゴロ」したゆれを作る。
+    //   wobbleRate  … 1秒に何回ゆらすか（12〜20 くらい）
+    //   wobbleDepth … ゆれの深さ（0〜0.5）。大きさが「1 − 2×深さ」から「1」のあいだでゆれる。
+    //                 例：0.3 なら 0.4〜1。ゆれは大きさを下げる向きだけなので、peak より大きくなることはない
+    // ゆらすための「ゆっくりの波」（LFO）は、音の大きさを動かすだけに使う（スピーカーにはつながない）
+    function rumble(ctx, freqStart, freqEnd, start, length, peak, filterFreq, wobbleRate, wobbleDepth, holdRatio) {
+      if (holdRatio === undefined) holdRatio = 0.5;
+      const osc = ctx.createOscillator();   // 音のもと（ブーッとした音）
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(freqStart, start);
+      osc.frequency.exponentialRampToValueAtTime(freqEnd, start + length);
+
+      // 大きさの形（tone と同じ：ふわっと始まって、少し続いて、ふわっと終わる）
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.linearRampToValueAtTime(peak, start + 0.02);
+      gain.gain.setValueAtTime(peak, start + Math.max(0.02, length * holdRatio));
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
+
+      // ゴロゴロのゆれ：まんなかの大きさ（1 − 深さ）に、ゆっくりの波（± 深さ）を足す
+      const wobble = ctx.createGain();
+      wobble.gain.value = 1 - wobbleDepth;
+      const lfo = ctx.createOscillator();
+      lfo.type = "sine";
+      lfo.frequency.value = wobbleRate;
+      const lfoAmount = ctx.createGain();
+      lfoAmount.gain.value = wobbleDepth;
+      lfo.connect(lfoAmount);
+      lfoAmount.connect(wobble.gain);       // 音ではなく「大きさのつまみ」につなぐ
+
+      // 高い音を削ってやわらかくする
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = filterFreq;
+
+      osc.connect(gain);
+      gain.connect(wobble);
+      wobble.connect(filter);
+      filter.connect(master);
+
+      osc.start(start);
+      lfo.start(start);
+      osc.stop(start + length + 0.05);
+      lfo.stop(start + length + 0.05);
+    }
+
+    // 触ったときの音：エンジン「ブロロッ」＋ アームの「ガシャン」
+    // （2026-11-20 聞きくらべで選んだ「候補A まんなか」。値は聞きくらべのページと同じ）
     function playTapSound() {
-      const ctx = beginSound(0.6, false);
+      const ctx = beginSound(0.75, false);
       if (!ctx) return;
       const t = ctx.currentTime;
-      // ブーン（エンジン）。走りぬけの「ブーーン」と同じ作り方で、短め・高さの上がり方は控えめ
-      tone(ctx, "sawtooth", 80, 120, t, 0.45, 0.5, 700);
+      // ブロロッ（エンジン）：0.7秒。1秒に16回ゴロゴロ
+      rumble(ctx, 80, 110, t, 0.7, 0.36, 700, 16, 0.3);
 
       // ここから「ガシャン」（アームが下がりきったとき = 0.2秒後）
       const g = t + 0.2;
-      tone(ctx, "sawtooth", 160, 120, g, 0.08, 0.5, 1200);  // ガ（ジャリッとした音）
-      noise(ctx, g, 0.06, 0.5, 1200);                        // ガ（「ザッ」という音を重ねて、にごらせる）
-      noise(ctx, g + 0.06, 0.25, 0.45, 4500);                // シャ（長めの「シャー」）
-      tone(ctx, "triangle", 1040, 1040, g + 0.06, 0.3, 0.05, 0, 0); // ン（金属の響き。強いと「カン」に聞こえるので、ほんの少しだけ）
-      tone(ctx, "triangle", 1480, 1480, g + 0.06, 0.25, 0.04, 0, 0);
+      tone(ctx, "sawtooth", 110, 75, g, 0.1, 0.3, 500);     // ガ（低い「ゴッ」）
+      noise(ctx, g, 0.07, 0.35, 900);                        // ガ（にごった「ザッ」）
+      noise(ctx, g + 0.05, 0.07, 0.22, 2800);                // シャ（シャラッ 1）
+      noise(ctx, g + 0.10, 0.07, 0.18, 3200);                // シャ（シャラッ 2）
+      noise(ctx, g + 0.15, 0.08, 0.14, 3000);                // シャ（シャラッ 3）
+      tone(ctx, "sine", 390, 380, g + 0.19, 0.35, 0.03, 0, 0); // ン（とても小さい、まるい響き）
+    }
+
+    // 走りぬけ中にさわったときの音：やさしいクラクション「プッ」（0.16秒）
+    //   ・高さは「ピポッ♪」（880Hz）より低い 466Hz と 587Hz の2つの音を重ねる（車のクラクションらしく）
+    //   ・大きさは2つ合わせて 0.34（「ピポッ♪」の 0.4 以下）
+    //   ・まるい音にするため、やわらかい sine と、高い音を削った triangle を使う
+    //   ・前のクラクションから HORN_GAP（0.2秒）たっていないときは鳴らさない（同じ瞬間に重ねない）
+    let lastHornTime = -Infinity;  // 前にクラクションを鳴らした時刻（ミリ秒）
+    function playHornSound() {
+      const now = performance.now();
+      if (now - lastHornTime < HORN_GAP) return;   // 間隔があいていなければ鳴らさない
+      const ctx = beginSound(0.2, false);           // 同時に3つまでの決まりに入れる。音を消しているときは null
+      if (!ctx) return;
+      lastHornTime = now;
+      const t = ctx.currentTime;
+      tone(ctx, "triangle", 466, 460, t, 0.16, 0.18, 1500); // プ（やわらかい低めの音）
+      tone(ctx, "sine", 587, 580, t, 0.16, 0.16);           // ッ（少し高い音を重ねて、クラクションらしく）
     }
 
     // 右はしから走りぬけるときの音：「ブーーン」（seconds 秒）
@@ -1064,7 +1304,17 @@
       if (e.target.closest("#muteBtn")) return;
       // 手のひらで何本もの指が同時にふれても、1本目の指だけに反応する
       if (!e.isPrimary) return;
-      if (busy) return; // 画面の外を回っているあいだは何もしない
+
+      // さわったので、指マークを消す（走りぬけ中のタッチもふくむ）
+      hideHint();
+
+      // 走りぬけ・戻ってくるあいだは、進まずに「プッ」と鳴らして、ぴょんとはねるだけ。
+      // 移動や、戻ってくるためのタイマーには、さわらない（戻る位置・時刻が変わらないように）
+      if (busy) {
+        playHornSound();
+        hop();
+        return;
+      }
 
       stopWaiting();
 
@@ -1079,8 +1329,10 @@
         scoopArm();
         playTapSound();
         startWaitingLater(WAIT_TIME);
+        showHintLater();                             // 5秒さわらなければ、指マークをまた出す
       } else {
         // 右はしに着いた → 右の外まで走りぬけて、左の外から戻ってくる
+        // （指マークは上の hideHint() で消してあり、タイマーも止まっている。戻ってから数え直す）
         busy = true;
 
         // ① 右の外へ走りぬける（距離に合わせた時間で）
@@ -1103,19 +1355,40 @@
             playArriveSound();                       // 「ピポッ♪」
             busy = false;                            // ④ またさわれるようにする
             startWaitingLater(WAIT_TIME);
+            showHintLater();                         // 止まってから5秒で、指マークをまた出す
           }, enterTime);
         }, exitTime);
       }
     });
 
-    // 画面を回転させたり、ウィンドウの大きさを変えたりしたとき
-    window.addEventListener("resize", function () {
+    // 画面の大きさに合わせて、車の大きさ・指マークの場所を合わせ直す
+    function refit() {
       updateSize();
       // 画面からはみ出していたら、見える位置に戻す
       if (!busy && x + carWidth() > window.innerWidth) {
         moveTo(Math.max(START_X, window.innerWidth - carWidth()), 0);
       }
-    });
+    }
+
+    // 画面を回転させたり、アドレスバーが出たり引っこんだり、ウィンドウの大きさを変えたりしたとき。
+    // iPhone / iPad の Safari では、知らせが来た瞬間には、まだ新しい高さ（dvh）が画面に
+    // 反映されていないことがある。そこで、すぐに1回、次の描きかえのときに1回、
+    // 0.3秒あとにもう1回、合わせ直す（何回知らせが来ても、前の予約は消してから作り直す）
+    let refitFrame = 0;     // 「次の描きかえのとき」の予約
+    let refitTimer = null;  // 「0.3秒あと」の予約
+    function onViewportChange() {
+      refit();
+      cancelAnimationFrame(refitFrame);
+      refitFrame = requestAnimationFrame(refit);
+      clearTimeout(refitTimer);
+      refitTimer = setTimeout(refit, 300);
+    }
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("orientationchange", onViewportChange);
+    // 見えている範囲（visualViewport）の大きさの知らせ。使えるブラウザだけ
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", onViewportChange);
+    }
 
     // 最初の準備
     updateSize();
