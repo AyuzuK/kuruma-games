@@ -27,10 +27,14 @@
     }
 
     /* 上に出すメッセージ */
+    /* 広い画面（横幅 560px 以上）：右上の2つのボタン（音を消す・トップ画面へ戻る）と重ならないように、
+       左右に 160px ずつあけて、まん中に出す。文字の大きさは、あいている幅に入るようにする
+       （横幅 667px で 約 29px、768px 以上で 32px）。折り返さない（いつも1行） */
     .message {
       text-align: center;
-      font-size: clamp(20px, 6vw, 32px); /* 画面がせまいときは文字を少し小さく（20〜32px） */
-      padding: 0 80px;               /* 右上の音ボタンと重ならないように、左右をあける */
+      font-size: clamp(18px, calc((100vw - 320px) / 12), 32px);
+      padding: 0 160px;
+      white-space: nowrap;
       font-weight: bold;
       /* 端末に入っている、丸みのある書体を先に試す（なければ ふつうの書体）。外から読み込まない */
       font-family: "Hiragino Maru Gothic ProN", "BIZ UDPGothic", system-ui, sans-serif;
@@ -43,6 +47,15 @@
       margin-top: 30px;
       position: relative;            /* z-index を効かせるために必要 */
       z-index: 1;                    /* 車や地面と重なっても、文字を手前に出す */
+    }
+    /* せまい画面（横幅 560px より小さい。スマホ縦など）：ボタンの段より下（上から 92px）に出す。
+       92px は、音を消しているボタン（64px）を押して 1.3倍になったときの下のはし 85.6px ＋ 6px */
+    @media (max-width: 559.98px) {
+      .message {
+        margin-top: 92px;
+        padding: 0 12px;
+        font-size: clamp(20px, 6vw, 32px);
+      }
     }
 
     /* =====================================================
@@ -409,6 +422,41 @@
       background: #fff;
       border-color: #e53935;         /* 赤いふち */
     }
+
+    /* ===== トップ画面へ戻るボタン（右上。音を消すボタンの左どなり） =====
+       見た目は音を消すボタンと同じ（52px の丸、うすい白、目立たせない）。中は、おうちの形の絵。
+       ボタンの右はしが、画面の右から 96px。音を消しているボタン（64px）が押されて 1.3倍になっても、
+       10px くらい あく */
+    .home-btn {
+      position: fixed;
+      top: 12px;
+      right: 96px;
+      z-index: 2;
+      width: 52px;
+      height: 52px;
+      padding: 0;
+      border: 3px solid transparent;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.4);
+      opacity: 0.6;
+      cursor: pointer;
+      touch-action: none;            /* 長押しのあいだ、画面が動かないように */
+      display: flex;                 /* 中の絵を、ボタンのまん中にそろえる */
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.2s;
+    }
+    .home-btn svg {
+      display: block;
+      width: 26px;
+      height: 26px;
+      pointer-events: none;          /* 中の絵をさわっても、ボタンをさわったことにする */
+    }
+    /* 長押ししているあいだ、2秒かけて少しずつ大きくなる */
+    .home-btn.pressing {
+      transform: scale(1.3);
+      transition: transform 2s linear;
+    }
   </style>
 </head>
 <body>
@@ -605,6 +653,19 @@
   </div>
 
   <div class="message">さわると うごくよ！</div>
+
+  <!-- トップ画面へ戻るボタン（大人用。2秒長押しで移る）。
+       <a> にしないのは、長押しでリンクの見本が出ないようにするため -->
+  <button class="home-btn" id="homeBtn" type="button" aria-label="もどる（2びょう ながおし）">
+    <!-- おうちの形（三角の屋根、四角いかべ、まん中に戸） -->
+    <svg viewBox="0 0 26 26" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="#5a3d1e" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M 6 11.5 L 6 23 L 20 23 L 20 11.5" fill="#fff3c4"/>
+        <path d="M 2.5 13 L 13 3.5 L 23.5 13"/>
+        <path d="M 10.5 23 L 10.5 17 L 15.5 17 L 15.5 23"/>
+      </g>
+    </svg>
+  </button>
 
   <!-- 音を消すボタン（大人用。2秒長押しで切り替え） -->
   <button class="mute-btn" id="muteBtn" type="button" aria-label="おとを けす（2びょう ながおし）">🔊</button>
@@ -909,13 +970,15 @@
     // ----- 音の設定 -----
     const VOLUME = 0.5;          // 全体の音量（0〜1。0.5 = 最大の半分くらい）
     const MAX_VOICES = 3;        // 同時に鳴らす音の数の上限（連打しても音が重なりすぎないように）
-    const LONG_PRESS_TIME = 2000; // 音を消すボタンの長押し時間（ミリ秒）
+    const LONG_PRESS_TIME = 2000; // 音を消すボタン・トップ画面へ戻るボタンの長押し時間（ミリ秒）
+    const HOME_URL = "../../index.html"; // トップ画面
 
     // ショベルカーの部品を取り出す
     const shovel = document.getElementById("shovel");
     const shovelSize = document.getElementById("shovelSize");
     const armGroup = document.getElementById("armGroup");   // SVG の中の、アーム全体のグループ
     const muteBtn = document.getElementById("muteBtn");
+    const homeBtn = document.getElementById("homeBtn");      // トップ画面へ戻るボタン
     const shovelHop = document.getElementById("shovelHop");   // 「ぴょん」とはねる層
     const fingerHint = document.getElementById("fingerHint"); // 指マーク
     const message = document.querySelector(".message");       // 上の文字「さわると うごくよ！」
@@ -943,8 +1006,19 @@
     //   ② 屋根から文字までのすき間が足りないときは、まず小さくする（HINT_MIN_SCALE まで）
     //   ③ それでも足りないときは、足りないぶんだけ下げる（運転席に少し重なる）
     // こうすると、どんなに低い画面でも、指マークは消えずに、文字の下に出る
+    // 右上の2つのボタン（音を消す・トップ画面へ戻る）も、指マークと横に重なるときは、
+    // 上の文字と同じように、ボタンの下のはしより下に出す
     function placeHint() {
-      const textBottom = message.getBoundingClientRect().bottom;  // 文字の下のはし（画面の上から）
+      let textBottom = message.getBoundingClientRect().bottom;    // 文字の下のはし（画面の上から）
+      // 指マークの横のはば（もとの大きさのとき。小さくしても、この中におさまる）。x は行き先の位置
+      const hintLeft = x + 68 * scale - 28.25;
+      const hintRight = hintLeft + 40;
+      [muteBtn, homeBtn].forEach(function (btn) {
+        const r = btn.getBoundingClientRect();
+        if (r.right + HINT_GAP > hintLeft && r.left - HINT_GAP < hintRight) {
+          textBottom = Math.max(textBottom, r.bottom);           // ボタンの下のはしも避ける
+        }
+      });
       // 地面の上のふち（画面の上から）。#shovel の下のはしが、地面の上のふちに合わせてある
       const groundTop = shovel.getBoundingClientRect().bottom;
       const roofTop = groundTop - 192 * scale;                     // 運転席の屋根（画面の上から）
@@ -1027,7 +1101,9 @@
     function showHintLater() {
       clearTimeout(hintTimer);
       hintTimer = setTimeout(function () {
-        if (!busy) fingerHint.classList.add("show"); // 念のため、走りぬけ中は出さない
+        if (busy) return;                            // 念のため、走りぬけ中は出さない
+        placeHint();                                 // 出す直前に、いまの位置でボタンを避け直す
+        fingerHint.classList.add("show");
       }, HINT_TIME);
     }
 
@@ -1259,6 +1335,10 @@
       muteBtn.setAttribute("aria-label",
         muted ? "おとを だす（2びょう ながおし）" : "おとを けす（2びょう ながおし）");
       if (master) master.gain.value = muted ? 0 : VOLUME; // 鳴っている音もすぐ消す
+      // ボタンの大きさ（52px ↔ 64px）が変わるので、指マークの場所を計算し直す
+      // （押しているあいだの拡大が戻りきった 0.25秒あとにも、もう一度）
+      if (!busy) placeHint();
+      setTimeout(function () { if (!busy) placeHint(); }, 250);
     }
 
     // 押し始めたら、2秒タイマーをスタート
@@ -1289,6 +1369,69 @@
       e.preventDefault();
     });
 
+    // =====================================================
+    // トップ画面へ戻るボタン（2秒長押しで移る）
+    // =====================================================
+    // ・1本目の指（isPrimary）だけに反応する（手のひらを置いたまま別の指が当たっても、始まらないように）
+    // ・2秒たつ前に離す・外にずれる・取り消される（pointerup・pointerleave・pointercancel）と取り消す
+    // ・iPhone の Safari では、指がずれても pointerleave が来ないことがあるので、
+    //   長押しのあいだだけ window で、押した指（pointerId が同じ指）の動き・離した・取り消しを受け取り、
+    //   指がボタンの四角の外に出たら取り消す。長押しが終わる・取り消されたら、受け取りを外す
+    let homeTimer = null;    // 2秒を数えるタイマー
+    let homePointer = null;  // いま押している指の番号（押していないときは null）
+    let homeBox = null;      // 押し始めたときのボタンの四角（大きくなる前の形）
+
+    function onHomeMove(e) {
+      if (e.pointerId !== homePointer || !homeBox) return;
+      if (e.clientX < homeBox.left || e.clientX > homeBox.right ||
+          e.clientY < homeBox.top || e.clientY > homeBox.bottom) {
+        cancelHome();
+      }
+    }
+    function onHomeEnd(e) {
+      if (e.pointerId === homePointer) cancelHome();
+    }
+    function watchHome(on) {
+      const method = on ? "addEventListener" : "removeEventListener";
+      window[method]("pointermove", onHomeMove);
+      window[method]("pointerup", onHomeEnd);
+      window[method]("pointercancel", onHomeEnd);
+    }
+    function cancelHome() {
+      clearTimeout(homeTimer);
+      homeTimer = null;
+      if (homePointer !== null) watchHome(false);
+      homePointer = null;
+      homeBox = null;
+      homeBtn.classList.remove("pressing");
+    }
+
+    homeBtn.addEventListener("pointerdown", function (e) {
+      if (!e.isPrimary) return;                // 1本目の指だけ
+      // 指を離すまでボタンを触り続けている扱い（ポインターキャプチャ）を外して、ずれたことに気づけるようにする
+      if (homeBtn.hasPointerCapture && homeBtn.hasPointerCapture(e.pointerId)) {
+        homeBtn.releasePointerCapture(e.pointerId);
+      }
+      cancelHome();                            // 前の長押しが残っていたら、いったん消す
+      homeBox = homeBtn.getBoundingClientRect();
+      homePointer = e.pointerId;
+      watchHome(true);
+      homeBtn.classList.add("pressing");
+      homeTimer = setTimeout(function () {
+        cancelHome();
+        window.location.href = HOME_URL;
+      }, LONG_PRESS_TIME);
+    });
+    homeBtn.addEventListener("pointerup", onHomeEnd);
+    homeBtn.addEventListener("pointerleave", onHomeEnd);
+    homeBtn.addEventListener("pointercancel", onHomeEnd);
+    // 長押ししても、メニューが出ないようにする
+    homeBtn.addEventListener("contextmenu", function (e) {
+      e.preventDefault();
+    });
+    // ブラウザの「戻る」でこのページに戻ってきたとき、押しているあいだの表示が残らないようにする
+    window.addEventListener("pageshow", cancelHome);
+
     // iPhone や iPad では、指を「離したとき」でないと音の準備ができないことがあるので、ここでも準備する
     document.addEventListener("pointerup", function () {
       getAudio();
@@ -1298,8 +1441,8 @@
     // 画面のどこかに指（またはマウス）がふれた瞬間の動き
     // =====================================================
     document.addEventListener("pointerdown", function (e) {
-      // 音を消すボタンを触ったときは、車は動かさない
-      if (e.target.closest("#muteBtn")) return;
+      // 音を消すボタン・トップ画面へ戻るボタンを触ったときは、車は動かさない（指マークも消さない）
+      if (e.target.closest("#muteBtn") || e.target.closest("#homeBtn")) return;
       // 手のひらで何本もの指が同時にふれても、1本目の指だけに反応する
       if (!e.isPrimary) return;
 
