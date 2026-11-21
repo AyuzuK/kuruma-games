@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <!-- スマホやタブレットでもちょうどいい大きさで表示するための設定 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>だれの かげかな？</title>
+  <title>このくるまなーんだ？</title>
 
   <!-- 全部のゲームで使う、共通の見た目（拡大を止める・大人用ボタン・指マーク・ぴょん・紙ふぶき） -->
   <link rel="stylesheet" href="../../shared/kuruma-base.css">
@@ -159,7 +159,7 @@
       overflow: hidden;
     }
 
-    /* ===== 上の文字「だれの かげかな？」 =====
+    /* ===== 上の文字「このくるまなーんだ？」（正解のあいだは、くるまの名前） =====
        広い画面（横幅 560px 以上）：上から 30px。右上の2つのボタンを避けて、左右に 160px ずつあけて、まん中に出す
        せまい画面（560px より小さい）：ボタンの段より下（上から 92px）に出す */
     .message {
@@ -404,7 +404,8 @@
   <!-- ===== 背景4：道 ===== -->
   <div class="road" aria-hidden="true"></div>
 
-  <p class="kuruma-message message" id="message">だれの かげかな？</p>
+  <!-- data-showing：いま出している文字の種類（title ＝ 「このくるまなーんだ？」、name ＝ くるまの名前） -->
+  <p class="kuruma-message message" id="message" data-showing="title">このくるまなーんだ？</p>
 
   <!-- 大人用のボタン（どちらも2秒長押し）。トップ画面へ戻る・音を消す -->
   <button class="adult-btn home-btn" id="homeBtn" type="button" aria-label="もどる（2びょう ながおし）">
@@ -424,6 +425,7 @@
 
   <!-- 全部のゲームで使う、共通の部品（音 → さわる操作 → くるまの図鑑 → 動き → 3択 の順に読み込む） -->
   <script src="../../shared/kuruma-sound.js"></script>
+  <script src="../../shared/kuruma-bgm.js"></script>
   <script src="../../shared/kuruma-touch.js"></script>
   <script src="../../shared/kuruma-cars.js"></script>
   <script src="../../shared/kuruma-stage.js"></script>
@@ -482,6 +484,8 @@
       var NUDGE_TIME = 8000;     // 2問目から：さわらないでいると「えらんでね」を1回出すまで
       var MIN_STEP = 40;         // 1歩の長さの最低（走る時間の計算のもと）
       var STEP_DIV = 6;          // 1歩の長さ ＝ 画面の横幅 ÷ これ
+      var MSG_FADE = 250;        // 上の文字が消える時間・出る時間（それぞれ。ミリ秒）
+      var TITLE_TEXT = "このくるまなーんだ？";   // ふだんの上の文字
 
       // =====================================================
       // ページの部品
@@ -517,6 +521,63 @@
       // 動きを減らす設定か（そのときどきで調べる）
       function reduced() {
         return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+      }
+
+      // =====================================================
+      // 上の文字の入れかえ（ふだん：「このくるまなーんだ？」／正解のあいだ：くるまの名前）
+      //   ・文字は opacity だけを なめらかに変える（消える 0.25秒 → 文字を入れかえ → 出る 0.25秒）。
+      //     暗 → 明 の1往復だけで、点滅はしない
+      //   ・動きを減らす設定では、opacity を変えず、すぐ入れかえる
+      //   ・テストのため、いまの文字の種類を #message の data-showing（"title"・"name"）に書く
+      //     （textContent を入れかえるのと同じ時に書き換える）
+      // =====================================================
+      var msgTimer = null;         // 「消えてから入れかえる」ための予約
+      var msgFadeTimer = null;     // 走りさるとき、文字を先に消し始めるための予約
+
+      // 文字を入れかえて、出す（opacity を 1 にする。いま途中なら、その明るさから なめらかに）
+      function swapMessage(text, kind) {
+        message.textContent = text;
+        message.setAttribute("data-showing", kind);
+        if (reduced()) {
+          message.style.transition = "none";
+          message.style.opacity = "1";
+        } else {
+          message.style.transition = "opacity " + MSG_FADE + "ms ease";
+          message.style.opacity = "1";
+        }
+      }
+
+      // 正解のくるまの名前に入れかえる（まず消えて、入れかえてから出る）
+      function showNameMessage(name) {
+        clearTimeout(msgTimer);
+        clearTimeout(msgFadeTimer);
+        if (reduced()) {
+          swapMessage(name, "name");
+          return;
+        }
+        message.style.transition = "opacity " + MSG_FADE + "ms ease";
+        message.style.opacity = "0";
+        msgTimer = setTimeout(function () {
+          swapMessage(name, "name");
+        }, MSG_FADE);
+      }
+
+      // 走りさるとき：くるまが出ていく終わりの 0.25秒前から、名前を消し始める
+      // （次の問題を作るとき、ちょうど消え終わっているように）
+      function startFadeOutMessage(runMs) {
+        clearTimeout(msgFadeTimer);
+        if (reduced()) return;
+        msgFadeTimer = setTimeout(function () {
+          message.style.transition = "opacity " + MSG_FADE + "ms ease";
+          message.style.opacity = "0";
+        }, Math.max(0, runMs - MSG_FADE));
+      }
+
+      // 「このくるまなーんだ？」に戻す（次の問題を作るとき）
+      function showTitleMessage() {
+        clearTimeout(msgTimer);
+        clearTimeout(msgFadeTimer);
+        swapMessage(TITLE_TEXT, "title");
       }
 
       // ===== 場面を <body> に書く（テストの台本が場面を待てるように） =====
@@ -874,6 +935,7 @@
 
         C.celebrate();                    // 「ピポピン♪」と紙ふぶき
         ch.el.classList.add("jump");      // かげより手前に出す
+        showNameMessage(K.cars.get(ch.id).name);   // 上の文字を、くるまの名前に（図鑑の名前）
 
         // 地面の影は、跳び始めに見えなくして、消えるまで戻さない（宙に浮いた影が いっしょに動いて見えないように）
         var sh = ch.car.el.querySelector('[data-part="shadow"]');
@@ -957,6 +1019,7 @@
           winner.v.style.opacity = "0";
         }
         K.sound.playDrive(time / 1000);          // 「ブーーン」（走る時間に合わせる）
+        startFadeOutMessage(time);               // 名前を、走りさる終わりに合わせて消す
 
         setTimeout(startEnter, time);
       }
@@ -964,6 +1027,7 @@
       // ===== 次の問題：新しいかげが出て、新しい3台が左から入ってくる =====
       function startEnter() {
         var q = buildQuestion();
+        showTitleMessage();             // 上の文字を「このくるまなーんだ？」に戻す（新しい3台が入ってくる前）
         buildStage(q);                  // 古い絵を外して、今の画面の大きさで作り直す
         setScene("enter");
 
