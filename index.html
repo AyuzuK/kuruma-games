@@ -114,9 +114,9 @@
       overflow: visible;             /* アームの先は絵の枠より少し上に出るので、切らずに見せる */
     }
 
-    /* ===== ボタンを2つ並べる =====
+    /* ===== ボタンを3つ並べる =====
        横長の画面では左右に、縦長の画面では上下に並べる（ボタンのあいだは 24px）。
-       2つ並べて入らないときは、2つとも同じ率（--k、0.5〜1）で縮める。率は下の JavaScript が、
+       3つ並べて入らないときは、3つとも同じ率（--k、0.5〜1）で縮める。率は下の JavaScript が、
        画面の大きさが変わったときに計算して入れる。
        ボタンそのものの大きさ・ゆれ・沈み方は変えずに、外がわの箱（.slot-inner）を縮める */
     .games {
@@ -187,6 +187,53 @@
       height: 167px;
       display: block;
     }
+
+    /* ===== 3本目「だれの かげかな？」のボタン =====
+       作りは1本目・2本目のボタンと同じ。ふちと下の影の色だけ、こい あい色にして見分けやすくする */
+    .game-button.kage-button {
+      border-color: #4a62a8;
+      box-shadow: 0 10px 0 #2f437e;
+      animation-delay: -0.3s;        /* 1本目・2本目のボタンと、ゆれる向きを少しずらす */
+    }
+    .game-button.kage-button.pressed {
+      box-shadow: 0 2px 0 #2f437e;
+    }
+    /* かげのうしろの光の丸（うすいクリーム色。ふちが やわらかく消える）。下の部分は、草と道にかくれる */
+    .kage-spot {
+      position: absolute;
+      left: 31px;
+      top: 44px;
+      width: 160px;
+      height: 144px;
+      background: radial-gradient(closest-side,
+        rgba(255, 245, 220, 0.95) 0%, rgba(255, 245, 220, 0.95) 78%, rgba(255, 245, 220, 0) 100%);
+    }
+    /* かげの台（草の帯の中にのる）。右は ボタンの外までのびて、ボタンの角で切れる（ゲームと同じ長い台） */
+    .kage-dai {
+      position: absolute;
+      left: 15px;
+      top: 175px;
+      width: 300px;
+      height: 8px;
+      box-sizing: border-box;
+      border: 2px solid #5a3d1e;
+      border-radius: 4px;
+      background: #a9aeb6;
+      box-shadow: inset 0 1px 0 #c9cdd3, inset 0 -1px 0 #8a8f96;
+    }
+    /* しょうぼうしゃの絵（ゲームの図鑑の絵を写したもの。横310 × 縦220 を 0.6倍） */
+    .kage-svg {
+      position: absolute;
+      width: 186px;
+      height: 132px;
+      display: block;
+    }
+    .kage-svg.back  { left: 18px;  top: 46px; }    /* かげ（タイヤの下 y 129 → ボタンの y 175 ＝ 台の上の面） */
+    .kage-svg.front { left: 100px; top: 80px; }    /* 色つき（タイヤの下 y 209 ＝ 道の中） */
+    /* かげ：すべての色を1色（こい灰青）にする（ゲームと同じ。fill を持たない部品が黒にならないように、本体にも指定） */
+    .kage-mini { fill: #3a3f4b; }
+    .kage-mini [fill]:not([fill="none"]) { fill: #3a3f4b; }
+    .kage-mini [stroke]:not([stroke="none"]) { stroke: #3a3f4b; }
   </style>
 </head>
 <body>
@@ -481,6 +528,102 @@
     </svg>
   </a>
   </div></div>
+
+  <div class="slot"><div class="slot-inner">
+  <!-- 「だれの かげかな？」へのボタン。
+       ファイルをダブルクリックで開いたときも動くように、index.html まで書く -->
+  <a class="game-button kage-button" id="kageGame" href="games/03-kage/index.html" aria-label="だれの かげかな">
+    <!-- 奥から順に：光の丸 → 道と草 → 台 → かげのしょうぼうしゃ → 色のついたしょうぼうしゃ。文字は入れない -->
+    <div class="kage-spot"></div>
+    <div class="road"></div>
+    <div class="kage-dai"></div>
+
+    <!-- かげのしょうぼうしゃ（ゲームの図鑑の絵を写して、すべて1色にぬる。この画面では動かさない。
+         座標の枠は 横310 × 縦220。窓・ランプの光・地面の影は写さない）。id は使わない -->
+    <svg class="kage-svg back kage-mini" viewBox="0 0 310 220" aria-hidden="true" focusable="false">
+      <g stroke="#5a3d1e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+        <!-- 車体（はしごをのせる台・箱・とびらの線・道具入れのしま・まいたホース・バンパー） -->
+        <rect x="34" y="86" width="12" height="22" rx="2" fill="#9aa1a8"/>
+        <rect x="186" y="86" width="8" height="22" rx="2" fill="#9aa1a8"/>
+        <rect x="15" y="105" width="214" height="85" rx="10" fill="#e5483c" stroke="none"/>
+        <rect x="15" y="105" width="214" height="85" rx="10" fill="none"/>
+        <path d="M 70 112 L 70 182 M 150 112 L 150 182" fill="none" stroke-width="2"/>
+        <path d="M 162 126 L 214 126 M 162 138 L 214 138 M 162 150 L 214 150 M 162 162 L 214 162" fill="none" stroke="#c4352b" stroke-width="3"/>
+        <circle cx="110" cy="146" r="20" fill="#d9dde2" stroke-width="2.5"/>
+        <circle cx="110" cy="146" r="11" fill="#9aa1a8" stroke-width="2"/>
+        <circle cx="110" cy="146" r="4" fill="#d9dde2" stroke="none"/>
+        <rect x="296" y="174" width="12" height="12" rx="4" fill="#c8ccd0"/>
+        <!-- はしご（うしろのはしの支点 (40, 85) から右へ。下にかさなった段と、上の段） -->
+        <g transform="translate(40 85)">
+          <path d="M 45 -9 L 45 -1 M 68 -9 L 68 -1 M 91 -9 L 91 -1 M 114 -9 L 114 -1 M 137 -9 L 137 -1 M 160 -9 L 160 -1" fill="none" stroke="#9aa1a8" stroke-width="3"/>
+          <rect x="35" y="-15" width="140" height="6" rx="3" fill="#c3c8ce" stroke-width="2.5"/>
+          <rect x="35" y="-1" width="140" height="6" rx="3" fill="#c3c8ce" stroke-width="2.5"/>
+          <path d="M 5 -9 L 5 -1 M 28 -9 L 28 -1 M 51 -9 L 51 -1 M 74 -9 L 74 -1 M 97 -9 L 97 -1 M 120 -9 L 120 -1 M 143 -9 L 143 -1 M 166 -9 L 166 -1" fill="none" stroke="#9aa1a8" stroke-width="3"/>
+          <rect x="-5" y="-15" width="180" height="6" rx="3" fill="#d9dde2" stroke-width="2.5"/>
+          <rect x="-5" y="-1" width="180" height="6" rx="3" fill="#d9dde2" stroke-width="2.5"/>
+          <circle r="5" fill="#c8ccd0" stroke-width="2.5"/>
+        </g>
+        <!-- 運転席（右）と屋根のランプ・ライト -->
+        <path d="M 225 195 L 225 102 Q 225 90 237 90 L 274 90 Q 284 90 287 100 L 298 130 Q 300 136 300 144 L 300 187 Q 300 195 292 195 Z" fill="#e5483c" stroke="none"/>
+        <path d="M 225 195 L 225 102 Q 225 90 237 90 L 274 90 Q 284 90 287 100 L 298 130 Q 300 136 300 144 L 300 187 Q 300 195 292 195 Z" fill="none"/>
+        <path d="M 235 108 Q 235 102 241 102 L 273 102 Q 279 102 281 108 L 289 131 Q 290 136 285 136 L 239 136 Q 235 136 235 132 Z" fill="#bfe4f5" stroke-width="2.5"/>
+        <ellipse cx="262" cy="82" rx="10" ry="10" fill="#ff4f4f"/>
+        <circle cx="295" cy="160" r="5.5" fill="#fff3c4" stroke-width="2"/>
+        <rect x="10" y="168" width="6" height="10" rx="2" fill="#e86a5a" stroke-width="2"/>
+        <!-- タイヤ3つ -->
+        <g transform="translate(60 192)"><circle r="23" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/></g>
+        <g transform="translate(160 192)"><circle r="23" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/></g>
+        <g transform="translate(260 192)"><circle r="23" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/></g>
+      </g>
+    </svg>
+
+    <!-- 色のついたしょうぼうしゃ（同じ絵。色はそのまま。地面の影を足す。光の輪は写さない） -->
+    <svg class="kage-svg front" viewBox="0 0 310 220" aria-hidden="true" focusable="false">
+      <g stroke="#5a3d1e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+        <ellipse cx="158" cy="214" rx="140" ry="5" fill="#5a3d1e" opacity="0.25" stroke="none"/>
+        <rect x="34" y="86" width="12" height="22" rx="2" fill="#9aa1a8"/>
+        <rect x="186" y="86" width="8" height="22" rx="2" fill="#9aa1a8"/>
+        <rect x="15" y="105" width="214" height="85" rx="10" fill="#e5483c" stroke="none"/>
+        <rect x="21" y="110" width="202" height="6" rx="3" fill="#f2705f" stroke="none"/>
+        <rect x="21" y="178" width="202" height="7" rx="3" fill="#c4352b" stroke="none"/>
+        <rect x="15" y="105" width="214" height="85" rx="10" fill="none"/>
+        <path d="M 70 112 L 70 182 M 150 112 L 150 182" fill="none" stroke-width="2"/>
+        <path d="M 162 126 L 214 126 M 162 138 L 214 138 M 162 150 L 214 150 M 162 162 L 214 162" fill="none" stroke="#c4352b" stroke-width="3"/>
+        <circle cx="110" cy="146" r="20" fill="#d9dde2" stroke-width="2.5"/>
+        <circle cx="110" cy="146" r="11" fill="#9aa1a8" stroke-width="2"/>
+        <circle cx="110" cy="146" r="4" fill="#d9dde2" stroke="none"/>
+        <rect x="296" y="174" width="12" height="12" rx="4" fill="#c8ccd0"/>
+        <g transform="translate(40 85)">
+          <path d="M 45 -9 L 45 -1 M 68 -9 L 68 -1 M 91 -9 L 91 -1 M 114 -9 L 114 -1 M 137 -9 L 137 -1 M 160 -9 L 160 -1" fill="none" stroke="#9aa1a8" stroke-width="3"/>
+          <rect x="35" y="-15" width="140" height="6" rx="3" fill="#c3c8ce" stroke-width="2.5"/>
+          <rect x="35" y="-1" width="140" height="6" rx="3" fill="#c3c8ce" stroke-width="2.5"/>
+          <path d="M 5 -9 L 5 -1 M 28 -9 L 28 -1 M 51 -9 L 51 -1 M 74 -9 L 74 -1 M 97 -9 L 97 -1 M 120 -9 L 120 -1 M 143 -9 L 143 -1 M 166 -9 L 166 -1" fill="none" stroke="#9aa1a8" stroke-width="3"/>
+          <rect x="-5" y="-15" width="180" height="6" rx="3" fill="#d9dde2" stroke-width="2.5"/>
+          <rect x="-5" y="-1" width="180" height="6" rx="3" fill="#d9dde2" stroke-width="2.5"/>
+          <circle r="5" fill="#c8ccd0" stroke-width="2.5"/>
+        </g>
+        <path d="M 225 195 L 225 102 Q 225 90 237 90 L 274 90 Q 284 90 287 100 L 298 130 Q 300 136 300 144 L 300 187 Q 300 195 292 195 Z" fill="#e5483c" stroke="none"/>
+        <path d="M 232 108 Q 232 97 241 97 L 272 97" fill="none" stroke="#f2705f" stroke-width="5"/>
+        <path d="M 232 188 L 292 188" fill="none" stroke="#c4352b" stroke-width="7"/>
+        <path d="M 225 195 L 225 102 Q 225 90 237 90 L 274 90 Q 284 90 287 100 L 298 130 Q 300 136 300 144 L 300 187 Q 300 195 292 195 Z" fill="none"/>
+        <path d="M 235 108 Q 235 102 241 102 L 273 102 Q 279 102 281 108 L 289 131 Q 290 136 285 136 L 239 136 Q 235 136 235 132 Z" fill="#bfe4f5" stroke-width="2.5"/>
+        <g fill="none" stroke="#ffffff" stroke-width="4" opacity="0.7">
+          <path d="M 245 130 L 257 108"/>
+          <path d="M 256 130 L 268 108"/>
+        </g>
+        <rect x="237" y="146" width="13" height="4" rx="2" fill="#5a3d1e" stroke="none"/>
+        <path d="M 290 144 L 290 183" fill="none" stroke-width="1.5"/>
+        <ellipse cx="262" cy="82" rx="10" ry="10" fill="#ff4f4f"/>
+        <ellipse cx="262" cy="77.5" rx="6" ry="3" fill="#ffffff" opacity="0.5" stroke="none"/>
+        <circle cx="295" cy="160" r="5.5" fill="#fff3c4" stroke-width="2"/>
+        <rect x="10" y="168" width="6" height="10" rx="2" fill="#e86a5a" stroke-width="2"/>
+        <g transform="translate(60 192)"><circle r="23" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/><g fill="#8a8a8a" stroke="none"><circle r="3.5"/><circle cx="0" cy="-8" r="1.8"/><circle cx="6.9" cy="4" r="1.8"/><circle cx="-6.9" cy="4" r="1.8"/></g></g>
+        <g transform="translate(160 192)"><circle r="23" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/><g fill="#8a8a8a" stroke="none"><circle r="3.5"/><circle cx="0" cy="-8" r="1.8"/><circle cx="6.9" cy="4" r="1.8"/><circle cx="-6.9" cy="4" r="1.8"/></g></g>
+        <g transform="translate(260 192)"><circle r="23" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/><g fill="#8a8a8a" stroke="none"><circle r="3.5"/><circle cx="0" cy="-8" r="1.8"/><circle cx="6.9" cy="4" r="1.8"/><circle cx="-6.9" cy="4" r="1.8"/></g></g>
+      </g>
+    </svg>
+  </a>
+  </div></div>
   </div>
 
   <script>
@@ -496,8 +639,8 @@
       });
     });
 
-    // ボタンが2つ並んで画面に入るように、縮める率（0.5〜1）を決める。
-    //   横長の画面：左右に2つ（312 × 2 ＋ あいだ 24）、縦長の画面：上下に2つ（268 × 2 ＋ あいだ 24）。
+    // ボタンが3つ並んで画面に入るように、縮める率（0.5〜1）を決める。
+    //   横長の画面：左右に3つ（312 × 3 ＋ あいだ 24 × 2）、縦長の画面：上下に3つ（268 × 3 ＋ あいだ 24 × 2）。
     //   画面のはしからは 16px、題名とボタンのあいだは 24px あける。
     // 画面の大きさが変わったときだけ計算する（すぐ1回と、0.3秒あとにもう1回）
     var games = document.getElementById("games");
@@ -510,9 +653,9 @@
       var room = h - 32 - title.offsetHeight - 24;      // 題名の下で、ボタンに使える高さ
       var k;
       if (portrait) {
-        k = Math.min(1, (w - 32) / 312, (room - 24) / (268 * 2));
+        k = Math.min(1, (w - 32) / 312, (room - 24 * 2) / (268 * 3));
       } else {
-        k = Math.min(1, (w - 32 - 24) / (312 * 2), room / 268);
+        k = Math.min(1, (w - 32 - 24 * 2) / (312 * 3), room / 268);
       }
       games.style.setProperty("--k", Math.max(0.5, k));
     }

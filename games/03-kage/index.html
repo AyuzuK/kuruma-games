@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <!-- スマホやタブレットでもちょうどいい大きさで表示するための設定 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>だれの かげかな？</title>
+
+  <!-- 全部のゲームで使う、共通の見た目（拡大を止める・大人用ボタン・指マーク・ぴょん・紙ふぶき） -->
+  <link rel="stylesheet" href="../../shared/kuruma-base.css">
+
+  <style>
+    body {
+      position: relative;            /* 背景・くるまは、この画面いっぱいの箱を基準に置く（fixed と混ぜない） */
+      background: #d8f0ff;           /* 空の色（背景の絵が出るまでの、念のための色） */
+    }
+
+    /* =====================================================
+       背景（晴れた日の、町はずれの広い道。2本目と同じ作り）
+         .scenery    … 空・雲・丘・家並み・木・草地（道の上のはしまで）
+         .spot-clip  … かげのうしろの光の丸（台より下は切る）
+         .stage-layer… かげの台と、台の影
+         .road       … 道（選ぶくるまが並ぶ）
+       道の上のはし --road-top は、JavaScript が かげと3台を並べるたびに計算して書く
+       ===================================================== */
+    .scenery {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      /* 道の層と 2px 重ねる（画面の高さが端数のとき、境目に 1px のすき間が出ないように） */
+      height: calc(var(--road-top, 75vh) + 2px);
+      overflow: hidden;
+      /* 丘の絵の高さ。横幅の 1/3 か、この層の高さの 42% の、大きいほう（ただし 92% まで） */
+      --hills: min(max(33.4vw, 42%), 92%);
+      /* 空のグラデーション（上が濃く、下がうすい）。太陽は描かない（光の丸を目立たせるため） */
+      background: linear-gradient(#8ccbf0 0%, #d8f0ff 100%);
+    }
+    /* 縦長の画面では、丘を高めにして、上半分が空だけにならないようにする */
+    @media (orientation: portrait) {
+      .scenery { --hills: min(max(33.4vw, 56%), 92%); }
+    }
+
+    /* 雲：画面2つぶんの横長の帯に、同じ並びを2回くり返して置き、とてもゆっくり左へ流す（CSS だけで動かす）。
+       帯の半分（= 画面1つぶん）動いたところで最初に戻るので、つなぎ目が見えない。
+       上の文字と大人用ボタンの後ろを通らないように、帯は上から 84px より下に置く */
+    .clouds {
+      position: absolute;
+      left: 0;
+      top: 84px;
+      width: 200%;
+      height: max(60px, calc(100% - 84px - var(--hills) * 0.6));
+      animation: kumo 160s linear infinite;   /* 1周 160秒 */
+    }
+    @keyframes kumo {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+    .cloud {
+      position: absolute;
+      display: block;
+      height: auto;
+      aspect-ratio: 120 / 56;
+    }
+    .cloud-l { width: clamp(100px, 13vw, 200px); }
+    .cloud-m { width: clamp(80px, 10vw, 150px); }
+    .cloud-s { width: clamp(60px, 7vw, 110px); }
+    .cloud-low { display: none; }               /* 低い雲は、縦長の画面だけ */
+    @media (orientation: portrait) {
+      .cloud-low { display: block; }
+    }
+    /* 高さの低い画面：空がせまいので、雲を小さく・少なくする */
+    @media (max-height: 500px) {
+      .cloud-l { width: 76px; }
+      .cloud-m { width: 60px; }
+      .cloud-s { display: none; }
+    }
+
+    /* 丘・家並み・木・草地（下のはしを、道の上のふちにぴったり合わせる） */
+    .hills {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: var(--hills);
+      display: block;
+    }
+
+    /* 光の丸（かげのうしろ）。うすいクリーム色の だ円で、ふちが やわらかく消える。
+       動かない・点滅しない。場所と大きさは JavaScript が書く。
+       .spot-clip は画面の横いっぱい。縦は台の下のはしまでで切る（台より下に光が出ないように） */
+    .spot-clip {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 0;                     /* 台の下のはしまで。JavaScript が書く */
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .spot {
+      position: absolute;
+      pointer-events: none;
+      background: radial-gradient(closest-side,
+        rgba(255, 245, 220, 0.95) 0%, rgba(255, 245, 220, 0.95) 78%, rgba(255, 245, 220, 0) 100%);
+    }
+
+    /* かげの台と、台の影。右は画面の外までのびている（正解のくるまが、台の上を走って右から出ていく）。
+       はみ出した ぶんで、横のスクロールが出ないように、画面いっぱいの箱の中に置く */
+    .stage-layer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .dai {
+      position: absolute;
+      box-sizing: border-box;
+      border: 2px solid #5a3d1e;
+      background: #a9aeb6;
+      /* 上の面の明るいところ1段・下の影1段（グラデーションは使わない）。帯の太さは台の高さに合わせる */
+      box-shadow: inset 0 calc(2px * var(--ks, 1)) 0 #c9cdd3, inset 0 calc(-2px * var(--ks, 1)) 0 #8a8f96;
+      border-radius: max(3px, calc(6px * var(--ks, 1)));
+    }
+    .dai-shadow {
+      position: absolute;
+      background: #5a3d1e;
+      opacity: 0.18;
+      border-radius: 999px 0 0 999px;   /* 左はしだけ丸い */
+    }
+
+    /* 道。やさしい灰色に、上のふちの明るい線と、小さな点のでこぼこ。白線・矢印・文字は描かない。
+       上のはしは --road-top（かげと3台の並べ方で決まる）、下は画面のいちばん下 */
+    .road {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: var(--road-top, 75vh);
+      bottom: 0;
+      box-sizing: border-box;
+      border-top: 5px solid #d3d6db;
+      background-color: #b9bcc2;
+      background-image:
+        radial-gradient(circle, #a4a8ae 2.5px, rgba(164, 168, 174, 0) 3px),
+        radial-gradient(circle, #a4a8ae 2px, rgba(164, 168, 174, 0) 2.5px);
+      background-size: 96px 52px, 140px 70px;
+      background-position: 18px 20px, 70px 46px;
+      overflow: hidden;
+    }
+
+    /* 雲・木・家の形を1か所に書いておくための、見えない SVG */
+    .svg-defs {
+      position: absolute;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+    }
+
+    /* ===== 上の文字「だれの かげかな？」 =====
+       広い画面（横幅 560px 以上）：上から 30px。右上の2つのボタンを避けて、左右に 160px ずつあけて、まん中に出す
+       せまい画面（560px より小さい）：ボタンの段より下（上から 92px）に出す */
+    .message {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 30px;
+      padding: 0 160px;
+      font-size: clamp(18px, calc((100vw - 320px) / 12), 32px);
+      line-height: 1.3;
+      z-index: 2;                    /* くるまや地面と重なっても、文字を手前に出す */
+    }
+    @media (max-width: 559.98px) {
+      .message {
+        top: 92px;
+        padding: 0 12px;
+        font-size: clamp(20px, 6vw, 32px);
+      }
+    }
+
+    /* =====================================================
+       かげと、選ぶくるま
+       選ぶくるま1台は、外から順に、次の箱を重ねる（それぞれ役目がちがう）。
+         .choice       … 横の箱＝さわれる四角。左端に置いて、translateX だけで場所を決める（共通の部品 mover）
+         .choice-v     … 縦の箱。正解が かげへ跳ぶときの、縦の山なり（translateY）だけ
+         .car-frame    … 大きさの箱。横 310 × 縦 220 の枠。下のまん中を中心に scale
+         .kuruma-hop   … はねる箱（ぴょん・えらんでね）
+         .kuruma-tilt  … 首をかしげる箱
+         <svg>         … 図鑑のくるまの絵
+       かげ（#kage）は、同じ枠・同じ置き方で、図鑑の絵を1色にぬったもの
+       ===================================================== */
+    .field {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      overflow: hidden;              /* 右へ走りさるくるまで、横のスクロールが出ないように */
+      pointer-events: none;          /* 空いているところは、下の背景ではなく、画面全体の反応に任せる */
+    }
+    .choice {
+      position: absolute;
+      left: 0;
+      pointer-events: auto;          /* さわれる四角 */
+    }
+    .choice.jump {
+      z-index: 2;                    /* 跳んでいる・跳んだあとの正解は、かげより手前（紙ふぶき 3・大人用ボタン 4 より奥） */
+    }
+    .choice-v {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+    }
+    .car-frame {
+      position: absolute;
+      width: 310px;
+      height: 220px;
+      transform-origin: 50% 100%;    /* 下のまん中。大きさを変えても、地面から浮かない */
+    }
+    .car-frame > .kuruma-hop,
+    .car-frame .kuruma-tilt {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+    }
+    .kuruma-tilt {
+      transform-origin: 50% 100%;
+    }
+    /* 図鑑の絵を、枠の下そろえに置く（横は JavaScript が style で書く）。
+       図鑑があとから足す .kuruma-car { top: 0 } に負けないように、セレクターを強くしてある */
+    .car-frame .kuruma-car {
+      top: auto;
+      bottom: 0;
+    }
+
+    #kage {
+      position: absolute;
+      z-index: 1;
+      pointer-events: auto;          /* かげを さわっても「えらんでね」になる */
+    }
+
+    /* かげ：図鑑の絵の色を、すべて1色（こい灰青）にぬりかえる。窓・線・印は見えなくなり、形だけが残る。
+       fill="none"・stroke="none" の部品は そのまま（線だけの部品が ぬりつぶされないように）。
+       CSS の fill・stroke は、SVG の属性より強いので、図鑑の絵を書きかえずに済む */
+    .kuruma-car.kage { fill: #3a3f4b; }
+    .kuruma-car.kage [fill]:not([fill="none"]) { fill: #3a3f4b; }
+    .kuruma-car.kage [stroke]:not([stroke="none"]) { stroke: #3a3f4b; }
+    /* くるまの本体でないもの（地面の影・ランプの光の輪・土の山）は出さない */
+    .kuruma-car.kage [data-part="shadow"],
+    .kuruma-car.kage [data-part="glow"],
+    .kuruma-car.kage [data-part="dirt"] { display: none; }
+
+    /* 動きを減らす設定では、雲の流れも止める */
+    @media (prefers-reduced-motion: reduce) {
+      .clouds { animation: none; }
+    }
+  </style>
+</head>
+<body data-scene="ask" data-hint="off">
+
+  <!-- 雲・木・家の形（ここに1回だけ書いて、<use> で何回も使う）。この SVG 自体は見えない -->
+  <svg class="svg-defs" aria-hidden="true" focusable="false">
+    <defs>
+      <!-- 丸い木1本。根もとが (0, 0)、上に向かって y がマイナスになる -->
+      <g id="bgTree">
+        <g fill="#5a3d1e">
+          <circle cx="-18" cy="-70" r="24"/>
+          <circle cx="18" cy="-72" r="24"/>
+          <circle cx="0" cy="-98" r="28"/>
+        </g>
+        <g fill="#74963a">
+          <circle cx="-18" cy="-70" r="22"/>
+          <circle cx="18" cy="-72" r="22"/>
+        </g>
+        <g fill="#8fb34a">
+          <circle cx="-18" cy="-78" r="19"/>
+          <circle cx="18" cy="-80" r="19"/>
+          <circle cx="0" cy="-98" r="26"/>
+        </g>
+        <g fill="#b5c95a">
+          <circle cx="9" cy="-110" r="10"/>
+          <circle cx="24" cy="-88" r="6"/>
+        </g>
+        <path d="M -5 0 L -4 -50 L 4 -50 L 5 0 Z" fill="#8a5a3c" stroke="#5a3d1e" stroke-width="2" stroke-linejoin="round"/>
+      </g>
+
+      <!-- 小さな家1けん。下のまん中が (0, 0)。文字・看板は描かない -->
+      <g id="bgHouseA" stroke="#5a3d1e" stroke-width="1.5" stroke-linejoin="round">
+        <rect x="-15" y="-22" width="30" height="22" fill="#f6ead8"/>
+        <path d="M -20 -20 L 0 -38 L 20 -20 Z" fill="#e88a6a"/>
+        <rect x="-6" y="-15" width="12" height="8" rx="1.5" fill="#bfe4f5"/>
+      </g>
+      <g id="bgHouseB" stroke="#5a3d1e" stroke-width="1.5" stroke-linejoin="round">
+        <rect x="-18" y="-20" width="36" height="20" fill="#fbe3c4"/>
+        <path d="M -22 -18 L -12 -34 L 12 -34 L 22 -18 Z" fill="#7aa6d6"/>
+        <rect x="-12" y="-14" width="9" height="7" rx="1.5" fill="#bfe4f5"/>
+        <rect x="4" y="-14" width="9" height="7" rx="1.5" fill="#bfe4f5"/>
+      </g>
+      <g id="bgHouseC" stroke="#5a3d1e" stroke-width="1.5" stroke-linejoin="round">
+        <rect x="-12" y="-26" width="24" height="26" fill="#f6ead8"/>
+        <path d="M -16 -24 L 0 -40 L 16 -24 Z" fill="#9cc47a"/>
+        <rect x="-5" y="-18" width="10" height="8" rx="1.5" fill="#bfe4f5"/>
+      </g>
+
+      <!-- 雲（もこもこ）。下にうすい青の影、その上に白。輪かくなし -->
+      <g id="bgCloud">
+        <path fill="#dcebf7"
+              d="M 14 52 Q 2 52 4 42 Q 6 32 18 34 Q 20 18 38 20 Q 46 8 62 12 Q 76 6 84 20 Q 100 16 104 30 Q 118 32 116 44 Q 114 54 102 54 Z"/>
+        <path fill="#ffffff"
+              d="M 14 47 Q 2 47 4 37 Q 6 27 18 29 Q 20 13 38 15 Q 46 3 62 7 Q 76 1 84 15 Q 100 11 104 25 Q 118 27 116 39 Q 114 48 102 48 Z"/>
+      </g>
+    </defs>
+  </svg>
+
+  <!-- ===== 背景1：空と景色 ===== -->
+  <div class="scenery" aria-hidden="true">
+
+    <!-- 雲（左半分と右半分に、同じ並びで置く）。cloud-low は、縦長の画面だけに出す低い雲 -->
+    <div class="clouds">
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 3%; top: 8%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-m cloud-low" viewBox="0 0 120 56" style="left: 10%; top: 76%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-s" viewBox="0 0 120 56" style="left: 17%; top: 40%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-m" viewBox="0 0 120 56" style="left: 27%; top: 20%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-s cloud-low" viewBox="0 0 120 56" style="left: 33%; top: 66%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 40%; top: 2%;"><use href="#bgCloud"/></svg>
+
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 53%; top: 8%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-m cloud-low" viewBox="0 0 120 56" style="left: 60%; top: 76%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-s" viewBox="0 0 120 56" style="left: 67%; top: 40%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-m" viewBox="0 0 120 56" style="left: 77%; top: 20%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-s cloud-low" viewBox="0 0 120 56" style="left: 83%; top: 66%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 90%; top: 2%;"><use href="#bgCloud"/></svg>
+    </div>
+
+    <!-- 丘・家並み・木・草地。横長の絵を、画面いっぱいに広げて、はみ出た左右は切る（slice）。
+         背景は くるまより目立たないように、色を少しうすめにしてある -->
+    <svg class="hills" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMax slice">
+      <!-- 遠くの丘（奥。うすく） -->
+      <path fill="#a9d98b" opacity="0.55"
+            d="M 0 225 C 150 170 300 160 440 198 C 560 232 660 210 760 176 C 880 136 1010 142 1200 188 L 1200 400 L 0 400 Z"/>
+      <!-- 遠くの丘（手前） -->
+      <path fill="#a9d98b"
+            d="M 0 282 C 140 244 280 240 420 262 C 560 286 700 272 820 250 C 960 224 1080 236 1200 258 L 1200 400 L 0 400 Z"/>
+
+      <!-- 丘のふもとの、小さな家並み（くるまより ずっと小さく） -->
+      <g opacity="0.92">
+        <use href="#bgHouseA" transform="translate(205 300)"/>
+        <use href="#bgHouseC" transform="translate(250 302)"/>
+        <use href="#bgHouseB" transform="translate(545 304)"/>
+        <use href="#bgHouseA" transform="translate(815 300)"/>
+        <use href="#bgHouseB" transform="translate(868 303)"/>
+        <use href="#bgHouseC" transform="translate(1035 300)"/>
+      </g>
+
+      <!-- 丸い木 -->
+      <use href="#bgTree" transform="translate(110 330) scale(0.62)"/>
+      <use href="#bgTree" transform="translate(420 326) scale(0.5)"/>
+      <use href="#bgTree" transform="translate(690 330) scale(0.6)"/>
+      <use href="#bgTree" transform="translate(965 328) scale(0.52)"/>
+      <use href="#bgTree" transform="translate(1125 332) scale(0.66)"/>
+
+      <!-- 道の上（奥がわ）の、細い草地の帯 -->
+      <path fill="#a8d465"
+            d="M 0 324 C 220 314 420 322 600 320 C 800 318 1000 312 1200 322 L 1200 400 L 0 400 Z"/>
+      <!-- 草地の濃いところ -->
+      <g fill="#86bd52" opacity="0.5">
+        <ellipse cx="260" cy="356" rx="130" ry="8"/>
+        <ellipse cx="860" cy="368" rx="160" ry="9"/>
+        <ellipse cx="540" cy="378" rx="90" ry="6"/>
+      </g>
+      <!-- 小さな花（黄・白・ピンク）を少しだけ -->
+      <g>
+        <circle cx="80" cy="358" r="4.5" fill="#f5d34a"/>
+        <circle cx="96" cy="366" r="4" fill="#ffffff"/>
+        <circle cx="310" cy="372" r="4" fill="#f2a7b8"/>
+        <circle cx="470" cy="344" r="4" fill="#ffffff"/>
+        <circle cx="486" cy="350" r="4.5" fill="#f5d34a"/>
+        <circle cx="760" cy="376" r="4" fill="#f2a7b8"/>
+        <circle cx="940" cy="384" r="4.5" fill="#f5d34a"/>
+        <circle cx="956" cy="378" r="4" fill="#ffffff"/>
+        <circle cx="1090" cy="360" r="4" fill="#f2a7b8"/>
+      </g>
+      <!-- 草地の手前のふち（道との境目） -->
+      <path fill="#86bd52"
+            d="M 0 393 C 300 389 600 395 900 390 C 1000 388 1100 392 1200 391 L 1200 400 L 0 400 Z"/>
+    </svg>
+  </div>
+
+  <!-- ===== 背景2：かげのうしろの光の丸 ===== -->
+  <div class="spot-clip" id="spotClip" aria-hidden="true"><div class="spot" id="spot"></div></div>
+
+  <!-- ===== 背景3：かげの台と、台の影 ===== -->
+  <div class="stage-layer" aria-hidden="true">
+    <div class="dai-shadow" id="daiShadow"></div>
+    <div class="dai" id="dai"></div>
+  </div>
+
+  <!-- ===== 背景4：道 ===== -->
+  <div class="road" aria-hidden="true"></div>
+
+  <p class="kuruma-message message" id="message">だれの かげかな？</p>
+
+  <!-- 大人用のボタン（どちらも2秒長押し）。トップ画面へ戻る・音を消す -->
+  <button class="adult-btn home-btn" id="homeBtn" type="button" aria-label="もどる（2びょう ながおし）">
+    <!-- おうちの形（三角の屋根、四角いかべ、まん中に戸） -->
+    <svg viewBox="0 0 26 26" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="#5a3d1e" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M 6 11.5 L 6 23 L 20 23 L 20 11.5" fill="#fff3c4"/>
+        <path d="M 2.5 13 L 13 3.5 L 23.5 13"/>
+        <path d="M 10.5 23 L 10.5 17 L 15.5 17 L 15.5 23"/>
+      </g>
+    </svg>
+  </button>
+  <button class="adult-btn mute-btn" id="muteBtn" type="button" aria-label="おとを けす（2びょう ながおし）">🔊</button>
+
+  <!-- かげと、選ぶ3台（JavaScript が作って、この中に入れる） -->
+  <div class="field" id="field"></div>
+
+  <!-- 全部のゲームで使う、共通の部品（音 → さわる操作 → くるまの図鑑 → 動き → 3択 の順に読み込む） -->
+  <script src="../../shared/kuruma-sound.js"></script>
+  <script src="../../shared/kuruma-touch.js"></script>
+  <script src="../../shared/kuruma-cars.js"></script>
+  <script src="../../shared/kuruma-stage.js"></script>
+  <script src="../../shared/kuruma-choice.js"></script>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var K = window.Kuruma;
+      var C = K.choice;
+
+      // =====================================================
+      // 設定（数字を変えると動きが変わります）
+      // =====================================================
+      // 図鑑の9台
+      var IDS = ["mixer", "dump", "bulldozer", "garbage", "shovel", "fire", "ambulance", "crane", "police"];
+
+      // 同じ3択に入れない組み合わせ（かげの形が似ているもの・主な色がかぶるもの）。
+      // かげの見くらべページで見くらべて、見分けやすさを確かめてある
+      var NG_PAIRS = [
+        ["dump", "garbage"],       // 四角い荷台と運転席、タイヤ3つ
+        ["ambulance", "police"],   // タイヤ2つのまるい形、屋根のこぶ。どちらも白
+        ["dump", "fire"],          // 低い四角い箱と運転席
+        ["garbage", "fire"],       // うしろが高い、右に運転席
+        ["garbage", "ambulance"],  // 背の高い大きな箱
+        ["crane", "shovel"],       // 高くのびる うで。どちらも黄色
+        ["bulldozer", "shovel"],   // どちらも黄色のキャタピラ
+        ["bulldozer", "crane"]     // どちらも黄色
+      ];
+
+      // くるまの枠と、画面の並べ方
+      var FRAME_W = 310;         // くるまの枠の横（図鑑でいちばん横が大きいくるま）
+      var FRAME_H = 220;         // くるまの枠の縦
+      var SIDE = 12;             // 画面の左右のあき
+      var BOTTOM = 12;           // 画面の下のあき
+      var VGAP = 16;             // かげと選ぶ3台のあいだ
+      var CHOICE_MAX = 0.8;      // 選ぶくるまの率の上限
+      var KAGE_MAX = 1.0;        // かげの率の上限
+      var ADULT_BOTTOM = 76;     // 音を消しているときの大人用ボタン（64px）の下のはし（上から 12 + 64）
+      var HOME_URL = "../../index.html"; // トップ画面
+
+      // 動きの時間（ミリ秒）
+      var JUMP_TIME = 600;       // 正解のくるまが、かげへ跳ぶ時間
+      var KAGE_FADE = 300;       // 重なったあと、かげが消える時間
+      var LAMP_WAIT = 1500;      // ランプのあるくるまが、仕事を始めてから走りだすまで
+      var WORK_EXTRA = 200;      // ほかのくるまは、仕事の長さ ＋ これ
+      var OTHER_FADE = 500;      // ほかの2台が ふわっと消える時間
+      var OTHER_SINK = 6;        // 消えるとき、下へ沈む量（px）
+      var MIN_LEAVE_TIME = 300;     // 走りさる時間の下限（ミリ秒。画面が急に狭くなったときの、逆走・音の切れを防ぐ）
+      var KAGE_IN = 400;         // 新しいかげが ふわっと出る時間
+      var ENTER_TIME = 1200;     // 入ってくる1台の移動の時間
+      var ENTER_STAGGER = 150;   // 入ってくる3台の出発のずれ（右の台から）
+      var ENTER_TOTAL = 1500;    // 入ってくるのに かかる時間（いちばん遅い台が止まるまで）
+      var REDUCED_LEAVE = 500;   // 動きを減らす設定：その場で ふわっと消える時間
+      var NUDGE_TIME = 8000;     // 2問目から：さわらないでいると「えらんでね」を1回出すまで
+      var MIN_STEP = 40;         // 1歩の長さの最低（走る時間の計算のもと）
+      var STEP_DIV = 6;          // 1歩の長さ ＝ 画面の横幅 ÷ これ
+
+      // =====================================================
+      // ページの部品
+      // =====================================================
+      var body = document.body;
+      var field = document.getElementById("field");
+      var message = document.getElementById("message");
+      var muteBtn = document.getElementById("muteBtn");
+      var homeBtn = document.getElementById("homeBtn");
+      var dai = document.getElementById("dai");
+      var daiShadow = document.getElementById("daiShadow");
+      var spot = document.getElementById("spot");
+      var spotClip = document.getElementById("spotClip");
+
+      // =====================================================
+      // いまの状態
+      // =====================================================
+      var scene = "ask";           // いまの場面（ask・correct・leave・enter）
+      var qIndex = -1;             // 何問目か（0 から。画面には出さない）
+      var L = null;                // いまの並べ方（画面の大きさから計算した値）
+      var kage = null;             // いまのかげ
+      var choices = [];            // いまの選ぶ3台（左から順）
+      var winner = null;           // 正解をさわった1台
+      var wrongCount = 0;          // いまの問題で まちがえた回数（画面には出さない）
+      var autoNudged = false;      // 「えらんでね」（自動）を もう出したか
+      var nudgeTimer = null;
+      var hint = null;             // 指マーク（1問目だけ）
+      var bag = C.bag(IDS, Math.random);       // 正解の順番（袋）
+      var placer = C.places(Math.random, 3);   // 正解の場所
+      var prevSet = null;          // 前の問題の3台の組
+      var recentSets = [];         // 最近6問の3台の組（まちがい役が かたよらないように、出た回数を数える）
+
+      // 動きを減らす設定か（そのときどきで調べる）
+      function reduced() {
+        return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+      }
+
+      // ===== 場面を <body> に書く（テストの台本が場面を待てるように） =====
+      function setScene(value) {
+        scene = value;
+        body.setAttribute("data-scene", value);
+      }
+
+      // ===== 画面の大きさから、並べ方を計算する =====
+      // 上から：上の文字 → かげ → 選ぶ3台（画面の下）。かげは、上の文字・ボタンの段と、選ぶ3台のあいだの、まん中
+      function computeLayout() {
+        var W = window.innerWidth;
+        var H = window.innerHeight;
+        // かげを置き始める高さ：上の文字の下のはしと、大人用ボタンの下のはしの、下のほう ＋ 8px
+        var top = Math.max(message.getBoundingClientRect().bottom, ADULT_BOTTOM) + 8;
+        var A = H - top - BOTTOM - VGAP;                 // かげと3台に使える高さ
+        var slotW = (W - SIDE * 2) / 3;                  // 1台ぶんの横はば
+        var cs = Math.min(CHOICE_MAX, (slotW - 8) / FRAME_W, A * 0.45 / FRAME_H);   // 選ぶくるまの率
+        cs = Math.max(0.1, cs);
+        var ks = Math.max(cs, Math.min(KAGE_MAX, (W - SIDE * 2) / FRAME_W, (A - FRAME_H * cs) / FRAME_H)); // かげの率
+
+        var o = { W: W, H: H, TOP: top, slotW: slotW, cs: cs, ks: ks };
+        // 選ぶくるま
+        o.choiceBottom = H - BOTTOM;
+        o.choiceTop = o.choiceBottom - FRAME_H * cs;
+        o.tapTop = o.choiceTop - VGAP / 2;               // さわれる四角の上のはし（かげと3台のあいだの まん中）
+        // かげ（枠の大きさの箱）
+        var areaBottom = o.choiceTop - VGAP;
+        o.kageTop = (top + areaBottom - FRAME_H * ks) / 2;
+        o.kageBottom = o.kageTop + FRAME_H * ks;
+        o.kageLeft = (W - FRAME_W * ks) / 2;
+        // 台：上の面が、かげのタイヤの下（枠の y 215）と同じ高さ。右は画面の外までのびる
+        o.daiTop = o.kageBottom - 5 * ks;
+        o.daiH = Math.max(6, 12 * ks);
+        o.daiBottom = o.daiTop + o.daiH;
+        o.daiLeft = (W - 320 * ks) / 2;
+        o.daiRight = W + 20;
+        // 道の上のはし：台の下のはしと、選ぶくるまの枠の上のはしの、まん中
+        o.roadTop = (o.daiBottom + o.choiceTop) / 2;
+        // 光の丸
+        o.spotCX = W / 2;
+        o.spotCY = o.kageTop + 120 * ks;
+        o.spotRX = 0.6 * FRAME_W * ks;
+        o.spotRY = Math.max(1, Math.min(o.spotRX, o.spotCY - (top - 8)));
+        return o;
+      }
+      // 左から i 番目の台の止まる場所（横の箱の左のはし。画面の左端から）
+      function stopX(i) {
+        return SIDE + L.slotW * i;
+      }
+
+      // ===== 背景（道・光の丸・台）に、並べ方を書く =====
+      function applyBackground() {
+        body.style.setProperty("--road-top", L.roadTop + "px");
+        body.style.setProperty("--ks", L.ks);
+
+        spotClip.style.height = L.daiBottom + "px";
+        spot.style.left = (L.spotCX - L.spotRX) + "px";
+        spot.style.top = (L.spotCY - L.spotRY) + "px";
+        spot.style.width = (L.spotRX * 2) + "px";
+        spot.style.height = (L.spotRY * 2) + "px";
+
+        dai.style.left = L.daiLeft + "px";
+        dai.style.top = L.daiTop + "px";
+        dai.style.width = (L.daiRight - L.daiLeft) + "px";
+        dai.style.height = L.daiH + "px";
+
+        var sh = Math.max(4, 8 * L.ks);
+        var shLeft = L.daiLeft - 6 * L.ks;
+        daiShadow.style.left = shLeft + "px";
+        daiShadow.style.top = (L.daiBottom - sh / 2) + "px";
+        daiShadow.style.width = (L.daiRight - shLeft) + "px";
+        daiShadow.style.height = sh + "px";
+      }
+
+      // 大きさの箱（枠）の率と、置き場所
+      function setFrameScale(frame, s) {
+        frame.style.transform = "scale(" + s + ")";
+      }
+
+      // ===== かげを作る：図鑑の絵をもう1枚作って、kage のクラスを付ける（色は上の CSS） =====
+      function makeKage(id) {
+        var car = K.cars.create(id);
+        car.el.classList.add("kage");
+        car.el.style.left = ((FRAME_W - car.width) / 2) + "px";     // 枠の横のまん中
+        var el = document.createElement("div");
+        el.id = "kage";
+        var frame = document.createElement("div");
+        frame.className = "car-frame";
+        frame.appendChild(car.el);
+        el.appendChild(frame);
+        return { el: el, frame: frame, car: car };
+      }
+      function applyKage() {
+        var s = L.ks;
+        kage.el.style.left = L.kageLeft + "px";
+        kage.el.style.top = L.kageTop + "px";
+        kage.el.style.width = (FRAME_W * s) + "px";
+        kage.el.style.height = (FRAME_H * s) + "px";
+        kage.frame.style.left = ((FRAME_W * s - FRAME_W) / 2) + "px";
+        kage.frame.style.bottom = "0px";
+        setFrameScale(kage.frame, s);
+      }
+
+      // ===== 選ぶくるま1台を作る =====
+      function makeChoice(id, isCorrect) {
+        var car = K.cars.create(id);
+        car.el.style.left = ((FRAME_W - car.width) / 2) + "px";     // 枠の横のまん中
+
+        var el = document.createElement("div");           // 横の箱（さわれる四角）
+        el.className = "choice";
+        el.setAttribute("data-car", id);
+        el.setAttribute("data-correct", isCorrect ? "true" : "false");
+        var v = document.createElement("div");            // 縦の箱
+        v.className = "choice-v";
+        var frame = document.createElement("div");        // 大きさの箱
+        frame.className = "car-frame";
+        var hop = document.createElement("div");          // はねる箱
+        hop.className = "kuruma-hop";
+        var tilt = document.createElement("div");         // 首をかしげる箱
+        tilt.className = "kuruma-tilt";
+
+        tilt.appendChild(car.el);
+        hop.appendChild(tilt);
+        frame.appendChild(hop);
+        v.appendChild(frame);
+        el.appendChild(v);
+
+        return {
+          id: id,
+          correct: isCorrect,
+          car: car,
+          el: el,
+          v: v,
+          frame: frame,
+          hop: hop,
+          tilt: tilt,
+          mover: K.stage.mover(el),
+          hopper: K.stage.hopper(hop)
+        };
+      }
+      // 横の箱の大きさと、枠の置き場所（枠は、箱の横のまん中・下から BOTTOM）
+      function applyChoiceBox(ch) {
+        ch.el.style.top = L.tapTop + "px";
+        ch.el.style.width = L.slotW + "px";
+        ch.el.style.height = (L.H - L.tapTop) + "px";
+        ch.frame.style.left = ((L.slotW - FRAME_W) / 2) + "px";
+        ch.frame.style.bottom = BOTTOM + "px";
+      }
+
+      // 3台のはねる箱（左から順）
+      function hopEls() {
+        var list = [];
+        for (var i = 0; i < choices.length; i++) list.push(choices[i].hop);
+        return list;
+      }
+      function correctChoice() {
+        for (var i = 0; i < choices.length; i++) {
+          if (choices[i].correct) return choices[i];
+        }
+        return null;
+      }
+      function findChoice(el) {
+        for (var i = 0; i < choices.length; i++) {
+          if (choices[i].el === el) return choices[i];
+        }
+        return null;
+      }
+
+      // ===== 問題を作る =====
+      // 正解（袋から）→ まちがいの2台（入れない組み合わせを避けて）→ 正解の場所
+      function buildQuestion() {
+        var answer = bag.next();
+        var seen = {};
+        for (var rs = 0; rs < recentSets.length; rs++) {
+          for (var rt = 0; rt < recentSets[rs].length; rt++) seen[recentSets[rs][rt]] = (seen[recentSets[rs][rt]] || 0) + 1;
+        }
+        var set = C.pick(answer, IDS, NG_PAIRS, 3, prevSet, Math.random, seen);
+        if (!set) set = [answer, IDS[0] === answer ? IDS[1] : IDS[0], IDS[2] === answer ? IDS[3] : IDS[2]];  // ふつうは起きない（念のため）
+        prevSet = set.slice();
+        recentSets.push(set.slice());
+        if (recentSets.length > 6) recentSets.shift();
+        var others = [set[1], set[2]];
+        if (Math.random() < 0.5) others.reverse();
+        var place = placer.next();
+        var slotIds = [];
+        var k = 0;
+        for (var i = 0; i < 3; i++) {
+          slotIds.push(i === place ? answer : others[k++]);
+        }
+        return { answer: answer, slotIds: slotIds };
+      }
+
+      // 古い絵（かげ・3台）を、ページから外す（何問しても、要素がふえつづけないように）
+      function removeStage() {
+        if (kage && kage.el.parentNode) kage.el.parentNode.removeChild(kage.el);
+        for (var i = 0; i < choices.length; i++) {
+          if (choices[i].el.parentNode) choices[i].el.parentNode.removeChild(choices[i].el);
+        }
+        kage = null;
+        choices = [];
+        winner = null;
+        hint = null;      // 指マークは1問目の正解の中にあるので、いっしょに消える
+      }
+
+      // 新しい問題の、かげと3台を作って並べる（場所は まだ動かさない）
+      function buildStage(q) {
+        removeStage();
+        qIndex++;
+        L = computeLayout();                // 今の画面の大きさで、率・枠・止まる場所を計算し直す
+        applyBackground();
+
+        kage = makeKage(q.answer);
+        field.appendChild(kage.el);
+        applyKage();
+
+        for (var i = 0; i < 3; i++) {
+          var ch = makeChoice(q.slotIds[i], q.slotIds[i] === q.answer);
+          field.appendChild(ch.el);
+          applyChoiceBox(ch);
+          setFrameScale(ch.frame, L.cs);
+          choices.push(ch);
+        }
+        wrongCount = 0;
+        autoNudged = false;
+        body.setAttribute("data-answer", q.answer);
+        body.setAttribute("data-hint", "off");
+      }
+
+      // ===== ask のあいだの並べ直し（画面の大きさ・回転が変わったとき） =====
+      function refit() {
+        if (!kage) return;
+        L = computeLayout();
+        applyBackground();
+        applyKage();
+        for (var i = 0; i < choices.length; i++) {
+          applyChoiceBox(choices[i]);
+          setFrameScale(choices[i].frame, L.cs);
+          choices[i].mover.moveTo(stopX(i), 0);
+        }
+        placeHint();
+      }
+
+      // =====================================================
+      // 指マーク（1問目の正解のくるまの屋根の上）
+      // =====================================================
+      var hintTimer = K.touch.hintTimer(function () {
+        // 1問目の ask のあいだだけ、5秒さわらなかったら また出す
+        if (scene === "ask" && qIndex === 0 && hint) {
+          placeHint();
+          K.touch.showHint(hint);
+        }
+      });
+
+      // 指先を、図鑑に書いた場所（屋根の上）に置く。上の文字・2つの大人用ボタン・かげの枠・かげの台に
+      // 重なるときは、共通の部品の計算で、小さくする・下げる。
+      // 横の箱（.choice）の中での場所：横 ＝ 箱のまん中 ＋ (tip.x − 絵の横幅の半分) × cs、下から ＝ BOTTOM ＋ (220 − tip.y) × cs
+      function placeHint() {
+        if (!hint || !L || !kage) return;
+        var ch = correctChoice();
+        if (!ch) return;
+        var car = ch.car;
+        var cs = L.cs;
+        var fromBottom = BOTTOM + (car.height - car.tip.y) * cs;
+        var inBoxX = L.slotW / 2 + (car.tip.x - car.width / 2) * cs;
+        var tipX = ch.mover.x + inBoxX;          // 指先（画面の左から。動いている途中なら行き先）
+        var tipY = L.H - fromBottom;             // 指先（画面の上から）
+        var fit = K.touch.hintFit(tipX, tipY, [message, homeBtn, muteBtn, kage.el, dai]);
+        hint.style.setProperty("--hs", fit.scale);
+        hint.style.left = (inBoxX - K.touch.HINT_TIP_X * fit.scale) + "px";
+        hint.style.bottom = (fromBottom - fit.drop) + "px";
+      }
+
+      // =====================================================
+      // 「えらんでね」（2問目から。8秒さわらないと、1問に1回だけ）
+      // =====================================================
+      function restartNudgeTimer() {
+        clearTimeout(nudgeTimer);
+        if (qIndex === 0 || autoNudged) return;      // 1問目は指マーク。自動の1回を出したあとは、くり返さない
+        nudgeTimer = setTimeout(function () {
+          if (scene !== "ask" || autoNudged) return;
+          if (reduced()) return;                     // 動きを減らす設定：さわっていないのに動くものは出さない
+          autoNudged = true;
+          C.nudge(hopEls());
+        }, NUDGE_TIME);
+      }
+
+      // =====================================================
+      // 画面のどこかに指がふれた瞬間
+      // （大人用のボタンへのタッチと、2本目からの指は、共通の部品が はぶいてくれる）
+      // =====================================================
+      K.touch.onTap(function (e) {
+        // さわったので、指マークを消す（どの場面のタッチも）
+        if (hint) {
+          K.touch.hideHint(hint);
+          hintTimer.stop();
+        }
+
+        // 動いているあいだ：選べない。「プッ」と鳴らして、動いているくるまが ぴょんとはねるだけ。
+        // 移動やタイマーには さわらない（止まる場所・時刻が変わらないように）
+        if (scene !== "ask") {
+          K.sound.playHorn();
+          if (scene === "enter") {
+            for (var i = 0; i < choices.length; i++) choices[i].hopper.hop();
+          } else if (winner) {
+            winner.hopper.hop();          // correct・leave：正解のくるま
+          }
+          return;
+        }
+
+        var box = e.target && e.target.closest ? e.target.closest(".choice") : null;
+        var ch = box ? findChoice(box) : null;
+
+        if (!ch) {
+          // くるま以外（かげ・空）：3台が左から順に、小さくはねる（音なし。選んだことにも、まちがいにもならない）
+          C.nudge(hopEls());
+          afterTouch();
+          return;
+        }
+
+        C.stopNudge(hopEls());            // 残っている えらんでね の印を外す
+
+        if (ch.correct) {
+          onCorrect(ch);
+          return;
+        }
+
+        // ちがうくるま：首をかしげて「ぽよん」。2回まちがえたら、正解が ふわっと光る
+        var counted = C.wrong(ch.tilt);
+        if (counted) {
+          wrongCount++;
+          if (wrongCount >= C.HINT_AFTER) {
+            var right = correctChoice();
+            C.glow(right.frame, right.car.width);
+            body.setAttribute("data-hint", "glow");
+          }
+        }
+        afterTouch();
+      });
+
+      // ask で さわったあと：指マーク・えらんでね の数え直し
+      function afterTouch() {
+        if (qIndex === 0 && hint) hintTimer.restart();
+        restartNudgeTimer();
+      }
+
+      // =====================================================
+      // 正しいくるまを さわったとき：かげへ跳ぶ → 色がつく → 仕事 → 走りさる → 次の問題
+      // =====================================================
+      function onCorrect(ch) {
+        winner = ch;
+        setScene("correct");
+        clearTimeout(nudgeTimer);
+        hintTimer.stop();
+
+        C.celebrate();                    // 「ピポピン♪」と紙ふぶき
+        ch.el.classList.add("jump");      // かげより手前に出す
+
+        // 地面の影は、跳び始めに見えなくして、消えるまで戻さない（宙に浮いた影が いっしょに動いて見えないように）
+        var sh = ch.car.el.querySelector('[data-part="shadow"]');
+        if (sh) {
+          sh.style.transition = "opacity 150ms linear";
+          sh.style.opacity = "0";
+        }
+
+        // 跳ぶ先：かげの枠の横のまん中・下のはし・大きさ
+        var jumpX = L.W / 2 - L.slotW / 2;
+        var dy = L.kageBottom - L.choiceBottom;       // かげは上にあるので、マイナスの値
+        if (!reduced()) {
+          // 横（横の箱）・縦（縦の箱。行きすぎてから戻る山なり）・大きさ（大きさの箱）を、同時に動かす
+          ch.mover.moveTo(jumpX, JUMP_TIME);
+          ch.v.style.transition = "transform " + JUMP_TIME + "ms cubic-bezier(0.3, 1.3, 0.6, 1)";
+          ch.v.style.transform = "translateY(" + dy + "px)";
+          ch.frame.style.transition = "transform " + JUMP_TIME + "ms ease-in-out";
+          setFrameScale(ch.frame, L.ks);
+        } else {
+          // 動きを減らす設定：跳ばない。その場で ふわっと消えて、見えないうちに かげの場所へ移り、ふわっと出る（合わせて 0.6秒）
+          ch.v.style.transition = "opacity 300ms ease";
+          ch.v.style.opacity = "0";
+          setTimeout(function () {
+            ch.mover.moveTo(jumpX, 0);
+            ch.v.style.transition = "none";
+            ch.v.style.transform = "translateY(" + dy + "px)";
+            ch.frame.style.transition = "none";
+            setFrameScale(ch.frame, L.ks);
+            void ch.v.offsetWidth;
+            ch.v.style.transition = "opacity 300ms ease";
+            ch.v.style.opacity = "1";
+          }, JUMP_TIME / 2);
+        }
+
+        // 重なったら、かげが ふわっと消える（色がついたように見える）
+        setTimeout(function () {
+          if (!kage) return;
+          kage.el.style.transition = "opacity " + KAGE_FADE + "ms ease";
+          kage.el.style.opacity = "0";
+        }, JUMP_TIME);
+
+        // かげが消え終わってから、仕事の動きを1回と、仕事の音
+        var workStart = JUMP_TIME + KAGE_FADE;
+        setTimeout(function () {
+          ch.car.work();
+          ch.car.sound();
+        }, workStart);
+
+        // 仕事を始めてから走りだすまでの待ち時間（図鑑の値）。ランプのあるくるまは、サイレンとランプが収まるまで
+        var def = K.cars.get(ch.id);
+        var wait = def.lamp ? LAMP_WAIT : (def.workTime || 0) + WORK_EXTRA;
+        setTimeout(leave, workStart + wait);
+      }
+
+      // ===== 走りさる：正解のくるまは、かげの高さのまま、台の上を右の外へ。ほかの2台は ふわっと消える =====
+      function leave() {
+        setScene("leave");
+
+        for (var i = 0; i < choices.length; i++) {
+          var o = choices[i];
+          if (o === winner) continue;
+          o.v.style.transition = "opacity " + OTHER_FADE + "ms ease, transform " + OTHER_FADE + "ms ease";
+          o.v.style.opacity = "0";
+          if (!reduced()) o.v.style.transform = "translateY(" + OTHER_SINK + "px)";   // 動きを減らす設定では、沈まず、うすくなるだけ
+        }
+
+        var time;
+        if (!reduced()) {
+          // 1歩の長さ：画面の横幅 ÷ 6（最低 40px）。走る時間は、距離に合わせる（最長 1.5秒）
+          var step = Math.max(MIN_STEP, window.innerWidth / STEP_DIV);
+          // 横の箱の左のはしだけでなく、かげの大きさのくるまの絵の左のはしも、画面の外に出るところまで
+          var leaveX = K.stage.exitX() + Math.max(0, (FRAME_W * L.ks - L.slotW) / 2);
+          // 正解のあと、leave までのあいだに画面が大きく狭くなると、距離が 0 以下になることがある。
+          // そのときも、走る時間が 0 以下にならないように、時間の下限（最短 300ms）を決める
+          time = Math.max(MIN_LEAVE_TIME, K.stage.timeFor(Math.max(1, leaveX - winner.mover.x), step));
+          winner.mover.moveTo(leaveX, time);     // 縦の箱・大きさの箱は そのまま（宙を走らず、台の上を走る）
+        } else {
+          // 動きを減らす設定：走らず、その場で ふわっと消える
+          time = REDUCED_LEAVE;
+          winner.v.style.transition = "opacity " + REDUCED_LEAVE + "ms ease";
+          winner.v.style.opacity = "0";
+        }
+        K.sound.playDrive(time / 1000);          // 「ブーーン」（走る時間に合わせる）
+
+        setTimeout(startEnter, time);
+      }
+
+      // ===== 次の問題：新しいかげが出て、新しい3台が左から入ってくる =====
+      function startEnter() {
+        var q = buildQuestion();
+        buildStage(q);                  // 古い絵を外して、今の画面の大きさで作り直す
+        setScene("enter");
+
+        // 新しいかげが ふわっと出る
+        kage.el.style.opacity = "0";
+        void kage.el.offsetWidth;
+        kage.el.style.transition = "opacity " + KAGE_IN + "ms ease";
+        kage.el.style.opacity = "1";
+
+        var i;
+        if (!reduced()) {
+          // 3台は、止まる場所の並びのまま（列になって）、同じ距離だけ左の外から出発する
+          var D = stopX(2) - K.stage.enterX(L.slotW);
+          for (i = 0; i < 3; i++) choices[i].mover.moveTo(stopX(i) - D, 0);
+          // 右の台から順に、0.15秒ずつずらして走りだす（うしろの台が前の台に追いつかないように）
+          choices.forEach(function (c, idx) {
+            var delay = (2 - idx) * ENTER_STAGGER;
+            if (delay === 0) c.mover.moveTo(stopX(idx), ENTER_TIME);
+            else setTimeout(function () { c.mover.moveTo(stopX(idx), ENTER_TIME); }, delay);
+          });
+          setTimeout(toAsk, ENTER_TOTAL);
+        } else {
+          // 動きを減らす設定：走らず、止まる場所に ふわっと出る
+          for (i = 0; i < 3; i++) {
+            choices[i].mover.moveTo(stopX(i), 0);
+            choices[i].v.style.opacity = "0";
+          }
+          void field.offsetWidth;
+          for (i = 0; i < 3; i++) {
+            choices[i].v.style.transition = "opacity " + KAGE_IN + "ms ease";
+            choices[i].v.style.opacity = "1";
+          }
+          setTimeout(toAsk, KAGE_IN);
+        }
+      }
+
+      // 入ってきて止まったら、選べる。音は鳴らさない（正解の音と まぎらわしいため）。
+      // 入ってくるあいだに画面の大きさが変わっていたら、ここで並べ直す
+      function toAsk() {
+        setScene("ask");
+        refit();
+        restartNudgeTimer();
+      }
+
+      // =====================================================
+      // 画面の大きさ・回転が変わったとき
+      // ask のときだけ並べ直す（correct・leave・enter のあいだは、場面もタイマーも作り直さない）
+      // =====================================================
+      K.touch.onViewportChange(function () {
+        if (scene === "ask") refit();
+      });
+      window.addEventListener("load", function () {
+        if (scene === "ask") refit();
+      });
+
+      // =====================================================
+      // 大人用のボタン
+      // =====================================================
+      // 音を消す・出すを切りかえたら、ボタンの大きさ（52px ↔ 64px）が変わるので、指マークの場所を計算し直す。
+      // 押しているあいだの拡大が戻りきった 0.25秒あとにも、もう一度計算する
+      K.touch.setupMuteButton(muteBtn, function () {
+        if (scene === "ask") placeHint();
+        setTimeout(function () {
+          if (scene === "ask") placeHint();
+        }, 250);
+      });
+      K.touch.setupHomeButton(homeBtn, HOME_URL);
+
+      // =====================================================
+      // 最初の準備：1問目は、もう並んでいる形で始める（入ってくる動きはしない）
+      // =====================================================
+      buildStage(buildQuestion());
+      for (var n = 0; n < 3; n++) choices[n].mover.moveTo(stopX(n), 0);
+      setScene("ask");
+
+      // 指マーク：1問目の正解のくるまの屋根の上。ページを開いたときは出ている
+      hint = K.touch.createHint();
+      correctChoice().el.appendChild(hint);
+      placeHint();
+      K.touch.showHint(hint);
+    })();
+  </script>
+
+</body>
+</html>

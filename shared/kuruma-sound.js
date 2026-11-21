@@ -18,6 +18,7 @@
   var MAX_VOICES = 3;      // 同時に鳴らす音の数の上限（連打しても音が重なりすぎないように）
   var HORN_GAP = 200;      // クラクション「プッ」を、次に鳴らせるまでの間隔（ミリ秒）
   var NOISE_SECONDS = 0.8; // 「ザーッ」という音のもとの長さ（秒）。ダンプカーの「ザザー」（0.7秒）が入る長さ
+  var POYON_GAP = 200;     // 「ぽよん」を、次に鳴らせるまでの間隔（ミリ秒。「プッ」の HORN_GAP と同じ考え方）
 
   // 音の上限をおさえる仕組み（DynamicsCompressor）の設定。
   // 全体の音量つまみ（master）のあとに入れて、音が3つ重なっても、割れたり急に大きくなったりしないようにする。
@@ -283,6 +284,39 @@
     tone(ctx, "sawtooth", 80, 160, ctx.currentTime, seconds, 0.5, 700);
   }
 
+  // ===== 3択のゲーム（だれの かげかな？）の音 =====
+
+  // ちがうくるまを さわったときの音：「ぽよん」（0.42秒）
+  //   ブブーに聞こえないように、まるい音（sine・triangle）だけで作る。
+  //   「ぽ」は 520 → 400Hz、「よん」は 330 → 440 → 392Hz と上がって、はじめの高さ（330Hz）より高いところで終わる。
+  //   前の「ぽよん」から POYON_GAP（0.2秒）たっていないときは鳴らさない。同時に3つまでの決まりに入れる
+  var lastPoyonTime = -Infinity;
+  function playPoyon() {
+    var now = (window.performance && performance.now) ? performance.now() : Date.now();
+    if (!renderCtx && now - lastPoyonTime < POYON_GAP) return;
+    var ctx = beginSound(0.45, false);
+    if (!ctx) return;
+    if (!renderCtx) lastPoyonTime = now;
+    var t = ctx.currentTime;
+    // 大きさは、計算で見積もって、目安（ブーーン比 0.6〜0.85）のまん中あたりに入る値にしてある
+    tone(ctx, "sine", 520, 400, t, 0.12, 0.145);                           // ぽ
+    glide(ctx, "triangle", [330, 440, 392], t + 0.10, 0.32, 0.117, 1400);  // よん（やわらかく）
+    glide(ctx, "sine", [330, 440, 392], t + 0.10, 0.32, 0.054);            // よん（まるみを足す）
+  }
+
+  // 正しいくるまを さわったときの音：「ピポピン♪」（0.61秒）
+  //   「ピポッ♪」と同じ やさしい sine で、1音たして上がっていく形。いちばん高い音は 1320Hz まで。
+  //   正解の合図なので、同時に3つまでの上限には関係なく鳴らす（「ピポッ♪」と同じ）
+  function playCorrect() {
+    var ctx = beginSound(0.65, true);
+    if (!ctx) return;
+    var t = ctx.currentTime;
+    tone(ctx, "sine", 880, 880, t, 0.12, 0.223);                  // ピ
+    tone(ctx, "sine", 1175, 1175, t + 0.13, 0.12, 0.211);         // ポ
+    tone(ctx, "sine", 1320, 1320, t + 0.26, 0.35, 0.211, 0, 0.3); // ピン（はじめの3割は同じ大きさ、あとは ゆっくり小さく）
+    tone(ctx, "sine", 660, 660, t + 0.26, 0.35, 0.074, 0, 0.3);   // ピン（細くなりすぎないように、低い音を重ねる）
+  }
+
   // ===== 音を消す・出す =====
   function setMuted(value) {
     muted = !!value;
@@ -380,6 +414,7 @@
     MAX_VOICES: MAX_VOICES,
     HORN_GAP: HORN_GAP,
     NOISE_SECONDS: NOISE_SECONDS,
+    POYON_GAP: POYON_GAP,
     prepare: getAudio,
     beginSound: beginSound,
     tone: tone,
@@ -389,6 +424,8 @@
     playArrive: playArrive,
     playHorn: playHorn,
     playDrive: playDrive,
+    playPoyon: playPoyon,
+    playCorrect: playCorrect,
     setMuted: setMuted,
     isMuted: isMuted,
     render: render
