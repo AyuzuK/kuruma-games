@@ -441,8 +441,9 @@
       // =====================================================
       // 設定（数字を変えると動きが変わります）
       // =====================================================
-      // 図鑑の9台
-      var IDS = ["mixer", "dump", "bulldozer", "garbage", "shovel", "fire", "ambulance", "crane", "police"];
+      // 図鑑の18台（図鑑の順）
+      var IDS = ["mixer", "dump", "bulldozer", "garbage", "shovel", "fire", "ambulance", "crane", "police",
+                 "grader", "tanker", "tractor", "taxi", "tow", "sports", "roller", "bus", "doubledecker"];
 
       // 同じ3択に入れない組み合わせ（かげの形が似ているもの・主な色がかぶるもの）。
       // かげの見くらべページで見くらべて、見分けやすさを確かめてある
@@ -454,7 +455,31 @@
         ["garbage", "ambulance"],  // 背の高い大きな箱
         ["crane", "shovel"],       // 高くのびる うで。どちらも黄色
         ["bulldozer", "shovel"],   // どちらも黄色のキャタピラ
-        ["bulldozer", "crane"]     // どちらも黄色
+        ["bulldozer", "crane"],    // どちらも黄色
+        // ここから、18台にするときに足した組（色が同じ：必ず入れる）
+        ["grader", "bulldozer"],   // どちらも黄色、運転席と前の刃
+        ["grader", "shovel"],      // どちらも黄色
+        ["grader", "crane"],       // どちらも黄色
+        ["roller", "mixer"],       // どちらもオレンジ
+        ["bus", "dump"],           // どちらも青
+        ["tractor", "garbage"],    // どちらも緑
+        ["doubledecker", "fire"],  // どちらも赤
+        // 形が似ている組
+        ["bus", "doubledecker"],   // 窓の多い大きな箱、タイヤ2つ
+        ["grader", "tractor"],     // 運転席がうしろ寄りで高い、前へのびる形
+        ["roller", "bulldozer"],   // 前に大きなもの＋屋根の高い運転席
+        ["tanker", "mixer"],       // 運転席のうしろに、まるい大きなもの
+        ["tanker", "dump"],        // 運転席のうしろに横長のもの、タイヤ3つ
+        ["tow", "crane"],          // うでと、たれ下がるフック
+        ["taxi", "police"],        // 乗用車の形、屋根の上のこぶ
+        ["taxi", "sports"],        // 乗用車の形、タイヤ2つ
+        ["police", "sports"],      // 乗用車の形、タイヤ2つ
+        ["bus", "ambulance"],      // 背の高いまるい箱、タイヤ2つ
+        ["tanker", "garbage"],     // 運転席のうしろに大きな箱・タンク、タイヤ3つ
+        ["tanker", "fire"],        // 運転席のうしろに横長のもの、タイヤ3つ
+        ["roller", "tractor"],     // 大きなまるい足まわり
+        ["tow", "dump"],           // 運転席のうしろに低い荷台、タイヤ3つ
+        ["bus", "garbage"]         // 背の高い大きな箱、上のふちが平ら
       ];
 
       // くるまの枠と、画面の並べ方
