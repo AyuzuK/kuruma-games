@@ -952,6 +952,9 @@
     </div>
   </div>
 
+  <!-- 共通の BGM（最初にさわったときから鳴る。音を消すボタンの処理は、下の setMuted から BGM にも伝える） -->
+  <script src="../../shared/kuruma-bgm.js"></script>
+
   <script>
     // ===== 設定（数字を変えると動きが変わります） =====
     const CAR_WIDTH = 300;   // ショベルカーのもともとの横幅（ピクセル）。CSS の .shovel の width と、SVG の横幅と同じ
@@ -1335,6 +1338,7 @@
       muteBtn.setAttribute("aria-label",
         muted ? "おとを だす（2びょう ながおし）" : "おとを けす（2びょう ながおし）");
       if (master) master.gain.value = muted ? 0 : VOLUME; // 鳴っている音もすぐ消す
+      if (window.Kuruma && window.Kuruma.bgm) window.Kuruma.bgm.setMuted(muted); // BGM も消す・出す
       // ボタンの大きさ（52px ↔ 64px）が変わるので、指マークの場所を計算し直す
       // （押しているあいだの拡大が戻りきった 0.25秒あとにも、もう一度）
       if (!busy) placeHint();
