@@ -134,12 +134,35 @@
       '<ellipse cx="' + cx + '" cy="' + (cy - ry * 0.45) + '" rx="' + (rx * 0.6) + '" ry="' + (ry * 0.3) + '" fill="#ffffff" opacity="0.5" stroke="none"/>');
   }
   // 光の輪（glow）：くるまの本体ではないので、専用の部品にする。うすい色の丸を2つ重ねる（グラデーションなし）
-  function glowPart(cx, cy) {
+  //   rx, ry … 横長のランプに合わせた楕円にするときの、外がわの輪の半径（省略すると 丸 r 32）
+  function glowPart(cx, cy, rx, ry) {
+    if (!rx) {
+      return '<g data-part="glow">' +
+        '<circle cx="' + cx + '" cy="' + cy + '" r="32" fill="#ffc4bc" opacity="0.25"/>' +
+        '<circle cx="' + cx + '" cy="' + cy + '" r="22" fill="#ff8a80" opacity="0.35"/>' +
+        '</g>';
+    }
+    // 内がわの輪は、外がわより 10 小さく
     return '<g data-part="glow">' +
-      '<circle cx="' + cx + '" cy="' + cy + '" r="32" fill="#ffc4bc" opacity="0.25"/>' +
-      '<circle cx="' + cx + '" cy="' + cy + '" r="22" fill="#ff8a80" opacity="0.35"/>' +
+      '<ellipse cx="' + cx + '" cy="' + cy + '" rx="' + rx + '" ry="' + ry + '" fill="#ffc4bc" opacity="0.25"/>' +
+      '<ellipse cx="' + cx + '" cy="' + cy + '" rx="' + (rx - 10) + '" ry="' + (ry - 8) + '" fill="#ff8a80" opacity="0.35"/>' +
       '</g>';
   }
+
+  // =====================================================
+  // 仕事の音の大きさ（追加修正1）
+  //   基準は、走りさる「ブーーン」（Kuruma.sound.playDrive。sawtooth 80→160Hz、大きさ 0.5、700Hz でやわらかく）。
+  //   聞きくらべのページで、どの仕事の音も「ブーーン」に対して
+  //     250Hz より下を削ったもの（スマホのスピーカーのまね）の平均の大きさ（RMS）0.8〜1.1、
+  //     そのままの いちばん大きいところ（ピーク）1.1 以下、3回連打のピーク 1 未満
+  //   になるようにする（そのままの RMS などは参考）。
+  //   そのために、次のように作っている。
+  //   ・エンジンのような音（sawtooth）は「ブーーン」と同じ形（80〜120Hz くらい、700〜950Hz でやわらかく）にする。
+  //     スマホでも聞こえる 250〜1000Hz の倍音が、「ブーーン」と同じくらい入る
+  //   ・サイレン（400〜960Hz）は、もともとスマホで聞こえる高さなので、そのまま使う
+  //   ・「ザーッ」（noise）は、平均の大きさのわりにピークが大きいので、少しだけ使う
+  //   ・1つの音の長さ：サイレンの3台は 1.4秒まで、ほかは 0.8秒まで。beginSound に渡す秒数も同じにする
+  // =====================================================
 
   // 色の組み合わせ（ふだん・明るいところ・影）
   var ORANGE = { main: "#f39a3d", light: "#ffb865", shade: "#d97a22" };
@@ -154,7 +177,7 @@
   var defs = {};
   var ids = [];
 
-  // くるまを図鑑に足す（A-2 では、ここに4台を足す）
+  // くるまを図鑑に足す（いまは9台。ゲームでの順番は、ゲームの側で決める）
   function add(def) {
     if (!defs[def.id]) ids.push(def.id);
     defs[def.id] = def;
@@ -263,6 +286,8 @@
   // 1. ミキサーしゃ（mixer、横 300）
   //    右に運転席、左に台。台の上に、右下がりに傾いた大きなたまご形のドラム（白にオレンジのしま）
   //    仕事：しまがドラムの中で横に流れて、ドラムが回って見える。ドラムが少しだけ上下にゆれる
+  //    いちばん動いたとき（ドラムが 2px 上がったとき）：ドラムの上のはし y 46、左の口のはし x 16 くらい（枠の中。
+  //    しまはドラムの形で切りぬいているので、外には出ない）
   // =====================================================
   add({
     id: "mixer",
@@ -311,16 +336,19 @@
       ".kc-mixer.kw-on .drum-bob { animation: kuruma-mixer-bob 0.6s ease-in-out; }\n" +
       "@keyframes kuruma-mixer-stripe { from { transform: translateX(0); } to { transform: translateX(56px); } }\n" +
       "@keyframes kuruma-mixer-bob { 0%, 50%, 100% { transform: translateY(0); } 25%, 75% { transform: translateY(-2px); } }\n",
-    // 「ゴロン ゴロン」：低く まるい音（ゴロゴロのゆれ入り）を2つ。0.62秒
+    // 「ゴロン ゴロン」：低く重い音（追加修正1）。0.75秒
+    //   もとの高さを 72→62Hz に下げ、ゆれを ゆっくり（1秒に7回）にした。
+    //   高い成分は 800Hz でやわらかく削る（目安の 400Hz まで削ると、スマホで聞こえる 250〜800Hz の倍音が
+    //   なくなって、スマホでは小さく聞こえるため。高さそのものは低いので、低く聞こえる）
+    //   測った結果（大きさ 0.5 のとき）：「ブーーン」に対して ピーク 1.031、250Hz より下を削ったもの RMS 0.827。
+    //   ピークが 1.1 をこえないところまで、1.065倍にした（見込み：ピーク 1.098、削ったもの RMS 0.881）
     sound: function () {
       var S = Kuruma.sound;
       if (!S) return;
-      var ctx = S.beginSound(0.7, false);
+      var ctx = S.beginSound(0.75, false);
       if (!ctx) return;
       var t = ctx.currentTime;
-      S.rumble(ctx, 95, 80, t, 0.32, 0.24, 500, 14, 0.25, 0.3);        // ゴロン
-      S.rumble(ctx, 88, 72, t + 0.3, 0.32, 0.22, 500, 14, 0.25, 0.3);  // ゴロン
-      S.tone(ctx, "sine", 75, 70, t, 0.62, 0.08);                        // ドラムの低い まるい響き
+      S.rumble(ctx, 72, 62, t, 0.75, 0.532, 800, 7, 0.15, 0.75);   // ゴロン ゴロン（ゆっくりゆれる低い音）
     }
   });
 
@@ -358,17 +386,26 @@
       ".kc-dump.kw-on .bed-tilt { animation: kuruma-dump-bed 0.6s ease-in-out; }\n" +
       "@keyframes kuruma-dump-bed { 0% { transform: rotate(0deg); } 35%, 45% { transform: rotate(-20deg); }" +
       " 80%, 100% { transform: rotate(0deg); } }\n",
-    // 「ウィーン・ゴトン」：やわらかく上がる音（200→300Hz、0.3秒）と、荷台が戻ったときの低い「ゴトン」
+    // 「ザザー」：砂利がすべり落ちる音（追加修正1）。0.75秒
+    //   荷台がすべる低い「ゴー」（sawtooth 100→80Hz）の上に、帯の広い にごった音（1100Hz・1700Hz のあたり）を重ね、
+    //   小さな「つぶ」（短い にごり 0.05秒）を、ばらばらの時刻に7つ足す。どれも だんだん小さくなる。
+    //   荷台が上がる「ウィーン」は外した（「ザザー」を聞きやすくするため）
+    //   測った結果（0.38・0.18・0.14・0.12 のとき）：ピーク 0.872、250Hz より下を削ったもの RMS 0.858。
+    //   1.11倍にした（見込み：ピーク 0.968、削ったもの RMS 0.952）
     sound: function () {
       var S = Kuruma.sound;
       if (!S) return;
-      var ctx = S.beginSound(0.7, false);
+      var ctx = S.beginSound(0.75, false);
       if (!ctx) return;
       var t = ctx.currentTime;
-      S.tone(ctx, "triangle", 200, 300, t, 0.3, 0.16, 1200, 0.6);  // ウィーン
-      S.tone(ctx, "sine", 200, 300, t, 0.3, 0.06, 0, 0.6);          // ウィーン（まるみ）
-      S.tone(ctx, "sine", 120, 70, t + 0.46, 0.2, 0.26, 0, 0.2);    // ゴトン（低い音）
-      S.noise(ctx, t + 0.46, 0.06, 0.12, 500);                       // ゴトン（にごり）
+      S.tone(ctx, "sawtooth", 100, 80, t, 0.75, 0.422, 750, 0.7);   // ゴー（荷台がすべる低い音）
+      S.noise(ctx, t, 0.7, 0.2, 1100, 0.35);                         // ザー
+      S.noise(ctx, t + 0.04, 0.62, 0.155, 1700, 0.3);                // ザー（少し高いところ）
+      // 「つぶ」の時刻（ばらばらに見えるように決めた並び。毎回同じなので、測った数字も変わらない）
+      var grains = [0.08, 0.17, 0.23, 0.34, 0.41, 0.52, 0.6];
+      for (var i = 0; i < grains.length; i++) {
+        S.noise(ctx, t + grains[i], 0.05, 0.133, i % 2 ? 1400 : 2000);
+      }
     }
   });
 
@@ -462,16 +499,21 @@
       " 60%, 72% { transform: translate(8px, 5px); } 100% { transform: translate(0, 0); } }\n" +
       "@keyframes kuruma-dozer-dirt { 0%, 35% { transform: scale(1, 1); } 60%, 72% { transform: scale(1.25, 0.75); }" +
       " 100% { transform: scale(1, 1); } }\n",
-    // 「ズズッ」：低い音に、にごった「ザッ」を小さく重ねる。0.45秒
+    // 「ズズッ」：低い音に、にごった「ザッ」を小さく重ねる。0.5秒（追加修正1：形はそのまま、大きくした）
+    //   大きくするのに合わせて、少しだけ整えた：高さ 70→58Hz を 78→64Hz に、やわらかくする高さ 450Hz を 850Hz に
+    //   （スマホでも聞こえるように）。ゆれは 0.3 を 0.15 に、大きさを保つ時間を半分から 7割に
+    //   （ピークだけが大きくならないように）
+    //   測った結果（0.508・0.194・0.151 のとき）：ピーク 1.031、250Hz より下を削ったもの RMS 0.815。
+    //   ピークが 1.1 をこえないところまで、1.065倍にした（見込み：ピーク 1.098、削ったもの RMS 0.868）
     sound: function () {
       var S = Kuruma.sound;
       if (!S) return;
       var ctx = S.beginSound(0.5, false);
       if (!ctx) return;
       var t = ctx.currentTime;
-      S.rumble(ctx, 70, 58, t, 0.45, 0.22, 450, 22, 0.3, 0.5);  // ズズ（低い音）
-      S.noise(ctx, t + 0.08, 0.28, 0.1, 600);                    // ザッ（にごった音を小さく）
-      S.noise(ctx, t + 0.3, 0.12, 0.08, 900);                    // ッ
+      S.rumble(ctx, 78, 64, t, 0.5, 0.541, 850, 22, 0.15, 0.7); // ズズ（低い音）
+      S.noise(ctx, t + 0.08, 0.28, 0.207, 600);                  // ザッ（にごった音を小さく）
+      S.noise(ctx, t + 0.3, 0.12, 0.161, 900);                   // ッ
     }
   });
 
@@ -521,27 +563,239 @@
       ".kc-garbage.kw-on .lid-open { animation: kuruma-garbage-lid 0.5s ease-in-out; }\n" +
       "@keyframes kuruma-garbage-lid { 0% { transform: rotate(0deg); } 30%, 40% { transform: rotate(20deg); }" +
       " 65%, 100% { transform: rotate(0deg); } }\n",
-    // 「パクッ」：やわらかい短い音2つ（開く「パ」・閉じる「クッ」）。0.4秒
+    // 「ガガー」：機械がかみ合って回る音（追加修正1）。0.65秒
+    //   ブーッとした音（sawtooth 125→105Hz）を、1秒に26回すばやくゆらし、950Hz でやわらかくする。
+    //   その上に、にごり（650Hz のあたり）を小さく重ねる
+    //   測った結果（0.48・0.12 のとき）：ピーク 0.987、250Hz より下を削ったもの RMS 0.900。
+    //   1.06倍にした（見込み：ピーク 1.046、削ったもの RMS 0.954）
     sound: function () {
       var S = Kuruma.sound;
       if (!S) return;
-      var ctx = S.beginSound(0.45, false);
+      var ctx = S.beginSound(0.65, false);
       if (!ctx) return;
       var t = ctx.currentTime;
-      S.tone(ctx, "triangle", 440, 380, t, 0.1, 0.14, 1400);   // パ（開く）
-      S.tone(ctx, "sine", 330, 220, t + 0.3, 0.09, 0.2);       // クッ（閉じる）
-      S.noise(ctx, t + 0.3, 0.04, 0.06, 700);                   // クッ（小さな にごり）
+      S.rumble(ctx, 125, 105, t, 0.65, 0.509, 950, 26, 0.25, 0.7); // ガガガ（すばやくゆれる音）
+      S.noise(ctx, t, 0.6, 0.127, 650, 0.5);                        // ー（にごり）
     }
   });
 
   // =====================================================
-  // 5. しょうぼうしゃ（fire、横 310）
+  // 5. しょべるかー（shovel、横 300）追加修正1
+  //    1本目（games/01-shovel）のショベルカーの絵を、形・色はそのままに、部品ごとに分けて写したもの。
+  //    重なる順番（奥 → 手前）：影 → 奥のキャタピラ → 旋回台・煙突 → アーム → 運転席 → 車体 → ライト → 手前のキャタピラ
+  //    仕事：アームが「すくう」（1本目の scoopArm と同じ形。ブーム 9度・スティック 11度・バケット 18度、0.5秒）
+  //
+  //    枠に入れるため、絵の全体を (150, 200) を中心に 0.97倍 にしている（形は1本目と同じ）。
+  //      1本目の座標のままだと、ふだんの形で、スティックの上のはし（丸いところ）が y -3（線をふくめて -4.5）になり、
+  //      枠の上から少し出るため。0.97倍にすると：
+  //        上のはし：y = 200 - 0.97 × (200 + 3)   = 3.1（線をふくめて 1.6）
+  //        下のはし：キャタピラの下 y 215 → 214.6。でこぼこの線の外がわ 220.5 → 219.9
+  //        右のはし：バケットの右はし x 290（線をふくめて 291.5）→ 286（287.3）
+  //        左のはし：キャタピラのでこぼこの外がわ x 4.5 → 8.9
+  //    いちばん動いたとき（すくって 0.2秒、ブーム 9度・スティック 合わせて 20度・バケット 合わせて 38度）：
+  //      スティックの関節 (175, 20) → (190.0, 29.8)、バケットの関節 (230, 105) → (212.6, 128.5)
+  //      バケットのいちばん下は y 201（0.97倍で 201.5）、いちばん右は x 255 くらい。
+  //      スティックの上のはしは、回って下がるので y 14 くらい。どれも枠の中
+  //      （ふだんの形がいちばん上・いちばん右になる）
+  // =====================================================
+  var SHOVEL_TRACK = "M 35 165 L 106.46 165 A 25 25 0 0 1 106.46 215 L 35 215 A 25 25 0 0 1 35 165 Z";
+  var SHOVEL_BUCKET = "M -8 -4 L 38 -6 Q 62 10 58 34 Q 54 60 26 64 L 2 64 Q -6 64 -6 58 Q 12 28 -8 -4 Z";
+  var SHOVEL_CAB = "M 34 115 L 34 46 Q 34 28 52 28 L 104 28 Q 119 28 121 43 L 126 115 Z";
+
+  // キャタピラの車輪（大）とローラー（小）。1本目と同じ形・色
+  //   dark … 奥のキャタピラ用の、少し暗い色にするか
+  function shovelWheel(cx, dark) {
+    return '<g transform="translate(' + cx + ' 190)"><g class="spin">' +
+      '<circle r="18" fill="' + (dark ? "#5e5e5e" : "#6e6e6e") + '" stroke="#3a2614" stroke-width="2.5"/>' +
+      '<circle r="7" fill="' + (dark ? "#4a4a4a" : "#555555") + '" stroke="none"/>' +
+      '<g fill="' + (dark ? "#7a7a7a" : "#8a8a8a") + '" stroke="none">' +
+        '<circle cx="0" cy="-11" r="2.2"/><circle cx="9.5" cy="5.5" r="2.2"/><circle cx="-9.5" cy="5.5" r="2.2"/>' +
+      '</g></g></g>';
+  }
+  function shovelRoller(cx) {
+    return '<g transform="translate(' + cx + ' 201)"><g class="spin spin-fast">' +
+      '<circle r="5.5" fill="#5e5e5e" stroke="#3a2614" stroke-width="2"/>' +
+      '<circle cx="0" cy="-2.6" r="1.4" fill="#8a8a8a" stroke="none"/>' +
+      '</g></g>';
+  }
+  // キャタピラのでこぼこ（太い点線。まわりの長さが 300 = 12 × 25 なので、流れにつなぎ目が出ない）
+  function shovelTread(color) {
+    return '<path class="tread" d="' + SHOVEL_TRACK + '" fill="none" stroke="' + color + '" stroke-width="11"' +
+      ' stroke-dasharray="6 6" stroke-linecap="butt"/>';
+  }
+
+  add({
+    id: "shovel",
+    name: "しょべるかー",
+    width: 300,
+    // 運転席の屋根の上（横幅の 37% くらい）。屋根 y 28 は、0.97倍で y 33.6
+    tip: { x: 112, y: 34 },
+    workTime: 500,
+    draw: function (uid) {
+      var bodyClip = uid + "shovel-body";
+      var cabClip = uid + "shovel-cab";
+      var bucketClip = uid + "shovel-bucket";
+      return shadow(94, 86) +
+        // 絵の全体を 0.97倍（中心 (150, 200)）。部品の <g data-part> は、この中に並べる（入れ子にはしない）
+        '<g transform="translate(150 200) scale(0.97) translate(-150 -200)">' +
+        // 奥のキャタピラ（手前より右に 22・上に 7 ずらし、少し暗く）
+        part("track",
+          '<g transform="translate(22 -7)">' +
+            shovelTread("#2c2c2c") +
+            '<path d="' + SHOVEL_TRACK + '" fill="#3a3a3a" stroke="#3a2614"/>' +
+            shovelWheel(106.46, true) +
+          '</g>') +
+        // 旋回台（車体の下の暗い台）と、煙突（煙は出さない）
+        part("base",
+          '<rect x="36" y="150" width="96" height="18" rx="5" fill="#4a4a4a"/>' +
+          '<rect x="20" y="92" width="9" height="24" rx="2.5" fill="#4a4a4a"/>' +
+          '<rect x="18" y="88" width="13" height="7" rx="3.5" fill="#4a4a4a"/>') +
+        // アーム（ブーム > スティック > バケット）。関節ごとに、関節の場所へ translate した <g> の中で回す
+        part("arm",
+          // ブームの付け根の関節 (120, 120)
+          '<g transform="translate(120 120)"><g class="sv-boom">' +
+            // 油圧シリンダー2（ブームの上がわ）
+            '<line x1="26.2" y1="-91.9" x2="46.3" y2="-113.4" stroke-width="5"/>' +
+            '<line x1="26.2" y1="-91.9" x2="46.3" y2="-113.4" stroke="#c8ccd0" stroke-width="2.5"/>' +
+            '<line x1="9.8" y1="-74.4" x2="29.9" y2="-95.9" stroke-width="8"/>' +
+            '<line x1="9.8" y1="-74.4" x2="29.9" y2="-95.9" stroke="#4a4a4a" stroke-width="5"/>' +
+            // ブーム（「く」の字）と明るいところ
+            '<path fill="#f7c33c" d="M 11.5 3.4 L 28 -56.2 Q 29.7 -62 34.1 -66 L 61.1 -93.4 A 9 9 0 0 0 48.9 -106.6' +
+              ' L 18.5 -81.5 Q 10.3 -74.1 7.2 -63.4 L -11.5 -3.4 A 12 12 0 0 0 11.5 3.4 Z"/>' +
+            '<path d="M -1.8 -14.5 L 12.4 -62 Q 14.7 -71.3 22 -77.5 L 45 -98" fill="none" stroke="#ffd96b" stroke-width="4"/>' +
+            '<circle cx="9.8" cy="-74.4" r="3.5" fill="#ffd96b" stroke-width="2"/>' +
+            // 油圧シリンダー1（ブームの下がわ）
+            '<line x1="22.6" y1="-13" x2="28" y2="-50" stroke-width="5"/>' +
+            '<line x1="22.6" y1="-13" x2="28" y2="-50" stroke="#c8ccd0" stroke-width="2.5"/>' +
+            '<line x1="18" y1="18" x2="23.6" y2="-20" stroke-width="8"/>' +
+            '<line x1="18" y1="18" x2="23.6" y2="-20" stroke="#4a4a4a" stroke-width="5"/>' +
+            '<circle cx="28" cy="-50" r="3.5" fill="#ffd96b" stroke-width="2"/>' +
+            // スティックの関節（ブームの先）(55, -100)
+            '<g transform="translate(55 -100)"><g class="sv-stick">' +
+              '<path fill="#f7c33c" d="M -0.7 -18.6 L 61.7 80.7 A 8 8 0 0 1 48.3 89.4 L -16.7 -8.3 A 9.5 9.5 0 0 1 -0.7 -18.6 Z"/>' +
+              '<path d="M 3.1 -4.4 L 50.5 69.8" fill="none" stroke="#ffd96b" stroke-width="3.5"/>' +
+              // 油圧シリンダー3（スティックの外がわ）
+              '<line x1="36.2" y1="33.8" x2="64.4" y2="77.4" stroke-width="5"/>' +
+              '<line x1="36.2" y1="33.8" x2="64.4" y2="77.4" stroke="#c8ccd0" stroke-width="2.5"/>' +
+              '<line x1="15.5" y1="1.9" x2="40" y2="39.7" stroke-width="8"/>' +
+              '<line x1="15.5" y1="1.9" x2="40" y2="39.7" stroke="#4a4a4a" stroke-width="5"/>' +
+              '<circle cx="15.5" cy="1.9" r="3.5" fill="#ffd96b" stroke-width="2"/>' +
+              // バケットの関節（スティックの先）(55, 85)
+              '<g transform="translate(55 85)"><g class="sv-bucket">' +
+                '<rect x="-4" y="-12" width="32" height="10" rx="5" fill="#f7c33c"/>' +
+                '<circle cx="22" cy="-7" r="3" fill="#ffd96b" stroke-width="2"/>' +
+                // バケット：口は左向き。歯は付けず、丸みのある1枚の刃先。切りぬきの型は、この部品の中に置く
+                '<clipPath id="' + bucketClip + '"><path d="' + SHOVEL_BUCKET + '"/></clipPath>' +
+                '<path fill="#f7c33c" d="' + SHOVEL_BUCKET + '"/>' +
+                '<g clip-path="url(#' + bucketClip + ')" stroke="none">' +
+                  '<ellipse cx="30" cy="66" rx="42" ry="12" fill="#e0a52a"/>' +
+                  '<path d="M -6 58 Q 12 28 -8 -4" fill="none" stroke="#e0a52a" stroke-width="10"/>' +
+                  '<path d="M 40 -2 Q 58 12 55 32" fill="none" stroke="#ffd96b" stroke-width="4"/>' +
+                '</g>' +
+                '<path fill="none" d="' + SHOVEL_BUCKET + '"/>' +
+                '<circle r="5" fill="#ffd96b" stroke-width="2.5"/>' +
+                '<circle r="1.6" fill="' + LINE + '" stroke="none"/>' +
+              '</g></g>' +
+              // スティックの関節のピン
+              '<circle r="6" fill="#ffd96b" stroke-width="2.5"/>' +
+              '<circle r="2" fill="' + LINE + '" stroke="none"/>' +
+            '</g></g>' +
+            // ブームの付け根のピン
+            '<circle r="5" fill="#ffd96b" stroke-width="2.5"/>' +
+            '<circle r="1.6" fill="' + LINE + '" stroke="none"/>' +
+          '</g></g>') +
+        // 運転席（横 34〜126、縦 28〜115）。窓2枚、中の人は描かない
+        part("cab",
+          '<clipPath id="' + cabClip + '"><path d="' + SHOVEL_CAB + '"/></clipPath>' +
+          '<path fill="#f7c33c" d="' + SHOVEL_CAB + '"/>' +
+          '<g clip-path="url(#' + cabClip + ')" stroke="none">' +
+            '<rect x="30" y="22" width="100" height="12" fill="#ffd96b"/>' +
+          '</g>' +
+          '<path fill="none" d="' + SHOVEL_CAB + '"/>' +
+          '<path d="M 101 30 L 101 112" fill="none" stroke-width="1.5"/>' +
+          '<rect x="41" y="37" width="53" height="43" rx="7" fill="#bfe4f5" stroke-width="2.5"/>' +
+          '<path d="M 104 37 L 114 37 Q 118 37 118.5 41 L 121 76 Q 121.3 80 117 80 L 104 80 Z" fill="#bfe4f5" stroke-width="2.5"/>' +
+          '<g stroke="#ffffff" stroke-width="4" opacity="0.7" fill="none">' +
+            '<path d="M 50 74 L 65 44"/><path d="M 61 74 L 76 44"/><path d="M 108 72 L 114 46"/>' +
+          '</g>' +
+          '<path d="M 39 86 L 39 110" fill="none" stroke-width="1.5"/>' +
+          '<rect x="84" y="90" width="12" height="4" rx="2" fill="' + LINE + '" stroke="none"/>') +
+        // 車体（下の箱。縦 112〜160）と、うしろの通気口
+        part("body",
+          '<clipPath id="' + bodyClip + '"><rect x="15" y="112" width="130" height="48" rx="14"/></clipPath>' +
+          '<rect x="15" y="112" width="130" height="48" rx="14" fill="#f7c33c" stroke="none"/>' +
+          '<g clip-path="url(#' + bodyClip + ')" stroke="none">' +
+            '<rect x="15" y="112" width="130" height="7" fill="#ffd96b"/>' +
+            '<rect x="15" y="151" width="130" height="9" fill="#e0a52a"/>' +
+          '</g>' +
+          '<rect x="15" y="112" width="130" height="48" rx="14" fill="none"/>' +
+          '<path d="M 121 115 L 121 157" fill="none" stroke-width="1.5"/>' +
+          '<g stroke-width="3.5" fill="none">' +
+            '<path d="M 24 125 L 38 125"/><path d="M 24 132 L 38 132"/><path d="M 24 139 L 38 139"/>' +
+          '</g>') +
+        // 前のライト2つ
+        part("light",
+          '<circle cx="128" cy="140" r="5" fill="#fff3c4" stroke-width="2"/>' +
+          '<circle cx="139" cy="140" r="5" fill="#fff3c4" stroke-width="2"/>') +
+        // 手前のキャタピラ（車輪・ローラー・カバーもこの中）
+        part("track",
+          shovelTread("#333333") +
+          '<path d="' + SHOVEL_TRACK + '" fill="#454545" stroke="#3a2614"/>' +
+          shovelWheel(35, false) + shovelWheel(106.46, false) +
+          shovelRoller(58) + shovelRoller(71) + shovelRoller(84) +
+          '<rect x="46" y="178" width="50" height="10" rx="5" fill="#f7c33c" stroke-width="2.5"/>') +
+        '</g>';
+    },
+    // 1本目の「ガシャン」と同じ動き（0.5秒。40% = 0.2秒で下がりきる。角度は入れ子なので足し算になる）
+    css:
+      ".kuruma-car .sv-boom, .kuruma-car .sv-stick, .kuruma-car .sv-bucket { transform-origin: 0 0; }\n" +
+      ".kc-shovel.kw-on .sv-boom { animation: kuruma-shovel-boom 0.5s ease-in-out; }\n" +
+      ".kc-shovel.kw-on .sv-stick { animation: kuruma-shovel-stick 0.5s ease-in-out; }\n" +
+      ".kc-shovel.kw-on .sv-bucket { animation: kuruma-shovel-bucket 0.5s ease-in-out; }\n" +
+      "@keyframes kuruma-shovel-boom { 0% { transform: rotate(0deg); } 40% { transform: rotate(9deg); } 100% { transform: rotate(0deg); } }\n" +
+      "@keyframes kuruma-shovel-stick { 0% { transform: rotate(0deg); } 40% { transform: rotate(11deg); } 100% { transform: rotate(0deg); } }\n" +
+      "@keyframes kuruma-shovel-bucket { 0% { transform: rotate(0deg); } 40%, 55% { transform: rotate(18deg); }" +
+      " 100% { transform: rotate(0deg); } }\n",
+    // 「ブロロッ・ガシャン」：1本目のさわったときの音（候補A）と同じ形（追加修正1）。0.8秒まで
+    //   1本目：ブロロッ（rumble 80→110Hz、0.7秒、1秒に16回ゆれる）＋ 0.2秒あとに「ガシャン」。
+    //   ここでは、大きさを「ブーーン」に合わせるため、次のように整えた。
+    //   ・ブロロッ：大きさ 0.36 → 0.44。ゆれの深さ 0.3 → 0.15、大きさを保つ時間を半分から 7割に（平均の大きさを上げるため）
+    //   ・ガシャン：ブロロッのゆれが いちばん小さくなる時刻（0.234秒。1秒に16回のゆれの谷）に合わせて鳴らし、
+    //     大きさを 1本目の半分くらいにした（重なったところのピークが大きくならないように）
+    //   測った結果（下の値の 1/1.025 のとき）：ピーク 1.070、250Hz より下を削ったもの RMS 0.813。
+    //   ピークが 1.1 をこえないところまで、1.025倍にした（見込み：ピーク 1.097、削ったもの RMS 0.833）
+    sound: function () {
+      var S = Kuruma.sound;
+      if (!S) return;
+      var ctx = S.beginSound(0.8, false);
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      S.rumble(ctx, 80, 110, t, 0.7, 0.451, 700, 16, 0.15, 0.7);  // ブロロッ（エンジン）
+      var g = t + 0.234;                                           // ここから「ガシャン」
+      S.tone(ctx, "sawtooth", 110, 75, g, 0.1, 0.102, 500);        // ガ（低い「ゴッ」）
+      S.noise(ctx, g, 0.07, 0.184, 900);                           // ガ（にごった「ザッ」）
+      S.noise(ctx, g + 0.05, 0.07, 0.113, 2800);                   // シャ
+      S.noise(ctx, g + 0.10, 0.07, 0.092, 3200);                   // シャ
+      S.noise(ctx, g + 0.15, 0.08, 0.072, 3000);                   // シャ
+      S.tone(ctx, "sine", 390, 380, g + 0.19, 0.35, 0.0205, 0, 0); // ン（とても小さい、まるい響き）。0.774秒で終わる
+    }
+  });
+
+  // =====================================================
+  // 6. しょうぼうしゃ（fire、横 310）
   //    右に赤い運転席、左に赤い箱の車体（とびらの線、銀色のまいたホース）。屋根に たたんだはしご。
   //    運転席の上に赤いランプ。火・煙・水は描かない
-  //    仕事：はしごが、付け根 (215, 85) を中心に 10度 上を向いてから、左へ 25px のびて、戻る。
-  //          同時にランプが1回光る。いちばん のびたとき、はしごの左はしは x 12 くらい（枠の中）
+  //    仕事（追加修正1）：はしごが、うしろのはしの支点 (40, 85) を中心に、前（右）が 18度 上がり、
+  //          上がったあと、のびる段が前（右上）へ 25px のびて、ちぢんで、下がって戻る（0.7秒）。
+  //          同時にランプが1回光る。
+  //    いちばん動いたとき（18度・25px）の計算：はしごの中の座標 (x, y) は、
+  //      絵の座標 (40 + x·cos18° + y·sin18°, 85 − x·sin18° + y·cos18°) になる（cos18° = 0.951、sin18° = 0.309）
+  //      ・のびる段の右上の角 (200, -15) → (225.6, 8.9)。いちばん上。線をふくめて y 7.6（枠の上 y 5 より下）
+  //      ・のびる段の右下の角 (200, 5)   → (231.7, 28.0)。いちばん右。線をふくめて x 233（枠の右 x 305 より左）
+  //      ・うしろのはしの左上 (-5, -15)  → (30.6, 72.3)。いちばん左
+  //      はしごは、運転席の上のランプ (262, 82) より左・上を通るので、ランプはかくれない
   // =====================================================
-  // はしごの1段ぶん（付け根が (0, 0)。左へのびる）。x0 … 左はし、len … 長さ
+  // はしごの1段ぶん（うしろのはしの支点が (0, 0)。右へのびる）。x0 … 左はし、len … 長さ
   function ladderSection(x0, len, railColor) {
     var rungs = "";
     for (var x = x0 + 10; x < x0 + len - 4; x += 23) {
@@ -556,13 +810,14 @@
     name: "しょうぼうしゃ",
     width: 310,
     tip: { x: 150, y: 68 },
-    workTime: 600,
+    workTime: 700,
     lamp: true,
     draw: function () {
       return shadow(158, 140) +
         part("body",
-          // はしごをのせる台（2本）。上のはしは、はしごのうしろにかくれる
-          '<rect x="62" y="86" width="8" height="22" rx="2" fill="#9aa1a8"/>' +
+          // はしごをのせる台：うしろは支点の台（はば 12）、前は はしごが下りたときに のる台。
+          // 上のはしは、はしごのうしろにかくれる
+          '<rect x="34" y="86" width="12" height="22" rx="2" fill="#9aa1a8"/>' +
           '<rect x="186" y="86" width="8" height="22" rx="2" fill="#9aa1a8"/>' +
           // 箱の車体
           '<rect x="15" y="105" width="214" height="85" rx="10" fill="#e5483c" stroke="none"/>' +
@@ -577,11 +832,13 @@
           '<circle cx="110" cy="146" r="11" fill="#9aa1a8" stroke-width="2"/>' +
           '<circle cx="110" cy="146" r="4" fill="#d9dde2" stroke="none"/>' +
           '<rect x="296" y="174" width="12" height="12" rx="4" fill="#c8ccd0"/>') +
-        // はしご：付け根 (215, 85) を (0, 0) にして回す。中の .extend（うしろの段）が左へのびる
+        // はしご：うしろのはしの支点 (40, 85) を (0, 0) にして回す。
+        // ふだんの場所は、前と同じ x 35〜215。中の .extend（下にかさなった段。x 35〜175）が、前（右）へのびる
         part("ladder",
-          '<g transform="translate(215 85)"><g class="ladder-rot">' +
-            '<g class="extend">' + ladderSection(-180, 140, "#c3c8ce") + '</g>' +
-            ladderSection(-180, 180, "#d9dde2") +
+          '<g transform="translate(40 85)"><g class="ladder-rot">' +
+            '<g class="extend">' + ladderSection(35, 140, "#c3c8ce") + '</g>' +
+            ladderSection(-5, 180, "#d9dde2") +
+            '<circle r="5" fill="#c8ccd0" stroke-width="2.5"/>' +     // 支点のピン
           '</g></g>') +
         cab(225, 300, 90, 195, RED) +
         glowPart(262, 82) +
@@ -591,34 +848,64 @@
     },
     css:
       ".kuruma-car .ladder-rot, .kuruma-car .extend { transform-origin: 0 0; }\n" +
-      ".kc-fire.kw-on .ladder-rot { animation: kuruma-fire-ladder 0.6s ease-in-out; }\n" +
-      ".kc-fire.kw-on .extend { animation: kuruma-fire-extend 0.6s ease-in-out; }\n" +
-      /* 上を向いてから のびて、ちぢめてから下を向く（左はしに近づきすぎないように） */
-      "@keyframes kuruma-fire-ladder { 0% { transform: rotate(0deg); } 25%, 85% { transform: rotate(10deg); }" +
+      ".kc-fire.kw-on .ladder-rot { animation: kuruma-fire-ladder 0.7s ease-in-out; }\n" +
+      ".kc-fire.kw-on .extend { animation: kuruma-fire-extend 0.7s ease-in-out; }\n" +
+      /* 前が上がってから のびて、ちぢめてから下がる（-18deg = 前が上がる向き） */
+      "@keyframes kuruma-fire-ladder { 0% { transform: rotate(0deg); } 30%, 82% { transform: rotate(-18deg); }" +
       " 100% { transform: rotate(0deg); } }\n" +
-      "@keyframes kuruma-fire-extend { 0%, 25% { transform: translateX(0); } 50%, 62% { transform: translateX(-25px); }" +
-      " 85%, 100% { transform: translateX(0); } }\n",
-    // 「カシャ カシャ」：小さく やわらかい音を3回（キンキンさせないように、高さをおさえる）。0.36秒
+      "@keyframes kuruma-fire-extend { 0%, 30% { transform: translateX(0); } 50%, 62% { transform: translateX(25px); }" +
+      " 82%, 100% { transform: translateX(0); } }\n",
+    // 「ウー・カンカン」（追加修正1）。1.4秒
+    //   サイレン「ウー」：triangle 400 → 800 → 400Hz、0.9秒（ゆっくり鳴り始める 0.15秒）。2000Hz でやわらかく
+    //   鐘「カン カン」：0.75秒と 1.0秒に。sine 1180Hz に、小さな 1770Hz を重ねた、すぐに小さくなる音（0.4秒）
+    //   測った結果（0.18・0.127・0.032 のとき）：ピーク 0.317、250Hz より下を削ったもの RMS 0.800。
+    //   1.19倍にした（見込み：ピーク 0.377、削ったもの RMS 0.952）
     sound: function () {
       var S = Kuruma.sound;
       if (!S) return;
-      var ctx = S.beginSound(0.45, false);
+      var ctx = S.beginSound(1.4, false);
       if (!ctx) return;
       var t = ctx.currentTime;
-      for (var i = 0; i < 3; i++) {
-        var s = t + i * 0.14;
-        S.tone(ctx, "triangle", 320, 280, s, 0.07, 0.1, 1200);   // カ（やわらかい音）
-        S.noise(ctx, s, 0.06, 0.08, 1600);                        // シャ（小さな にごり）
+      S.glide(ctx, "triangle", [400, 800, 400], t, 0.9, 0.214, 2000, 0.15, 0.67);   // ウー
+      var bells = [0.75, 1.0];
+      for (var i = 0; i < bells.length; i++) {
+        S.tone(ctx, "sine", 1180, 1170, t + bells[i], 0.4, 0.151, 0, 0);            // カン
+        S.tone(ctx, "sine", 1770, 1760, t + bells[i], 0.3, 0.038, 0, 0);            // カン（鐘らしい響き）
       }
     }
   });
 
   // =====================================================
-  // 6. きゅうきゅうしゃ（ambulance、横 280）
+  // 7. きゅうきゅうしゃ（ambulance、横 280）
   //    まるみのある白い箱のくるま（運転席と車体がひと続きなので cab は作らず、body と window）。
-  //    横に赤いライン、横の面にピンクのハート（白地に赤い十字は描かない）。屋根に赤いランプを前とうしろに2つ
+  //    横に赤いライン、横の面に青い星の印（白地に赤い十字は描かない）。屋根に赤いランプを前とうしろに2つ
   //    仕事：ランプが1回光る（ほかは動かない）
+  //    追加修正1：
+  //      ・ハートを外して、青い星の印にした（はばのある棒3本を 60度ずつ回して重ねた6本の腕の星に、白い つえを1本。
+  //        へびなどの細かい絵は描かない。形を簡単にした、このゲームだけの印）。中心 (70, 114)、腕の先まで 22。
+  //        x 48〜92、y 92〜136（線をふくめても、まどの x 100 と、赤いラインの y 146 にかからない）
+  //      ・うしろのランプ（中心 (60, 72)）を、横長の楕円（横の半径 17、縦の半径 7.5）にした。
+  //        光の輪も楕円（外がわ 横 38・縦 24）で、x 22〜98、y 48〜96（枠の中）
   // =====================================================
+  // 青い星の印（mark）。中心 (cx, cy)。ふちどりは、棒3本の外がわだけに見えるように、
+  // こげ茶の太い棒を先に描いてから、青い棒を上に重ねる（棒の重なったところに線が出ない）
+  function starMark(cx, cy) {
+    var bars = function (fill, sw) {
+      var s = "";
+      for (var a = 0; a < 180; a += 60) {
+        s += '<rect x="-6.5" y="-22" width="13" height="44" rx="4" transform="rotate(' + a + ')" fill="' + fill + '"' +
+          (sw ? ' stroke="' + LINE + '" stroke-width="' + sw + '"' : ' stroke="none"') + '/>';
+      }
+      return s;
+    };
+    return part("mark",
+      '<g transform="translate(' + cx + ' ' + cy + ')">' +
+        bars(LINE, 5) +          // ふちどり（太い線の外がわ半分が、ふちに見える）
+        bars("#2f6fd0", 0) +     // 青い星
+        '<rect x="-1.8" y="-15" width="3.6" height="30" rx="1.8" fill="#ffffff" stroke="none"/>' +   // 白い つえ
+        '<circle cx="0" cy="-15" r="2.6" fill="#ffffff" stroke="none"/>' +                           // つえの上の丸
+      '</g>');
+  }
   var AMB_BODY = "M 15 185 L 15 88 Q 15 75 28 75 L 222 75 Q 238 75 244 88 L 262 128 Q 270 140 270 152 " +
     "L 270 185 Q 270 195 260 195 L 25 195 Q 15 195 15 185 Z";
   add({
@@ -646,44 +933,54 @@
           '<g fill="none" stroke="#ffffff" stroke-width="4" opacity="0.7">' +
             '<path d="M 108 116 L 120 94"/><path d="M 168 116 L 180 94"/><path d="M 230 120 L 236 100"/>' +
           '</g>') +
-        // ピンクのハート
-        part("heart",
-          '<path d="M 70 132 C 52 120 50 104 60 100 C 66 97 70 102 70 106 C 70 102 74 97 80 100 C 90 104 88 120 70 132 Z"' +
-          ' fill="#f28ca6" stroke-width="2.5"/>') +
-        // ランプと光の輪は、ランプごとに1つずつ
-        glowPart(60, 72) + glowPart(235, 72) +
-        lampPart(60, 72, 9, 9) + lampPart(235, 72, 9, 9) +
+        // 青い星の印
+        starMark(70, 114) +
+        // ランプと光の輪は、ランプごとに1つずつ（うしろは横長の楕円、前は丸）
+        glowPart(60, 72, 38, 24) + glowPart(235, 72) +
+        lampPart(60, 72, 17, 7.5) + lampPart(235, 72, 9, 9) +
         lights(264, 166, 10, 158) +
         tire(70, 23) + tire(215, 23);
     },
-    // 「ピー ポー」：やさしい2つの音（sine。660Hz → 550Hz、それぞれ 0.25秒。「ピポッ♪」の 880Hz より低い）
+    // 「ピーポー」：本物に近い高さと長さ（追加修正1）。1.35秒
+    //   ピー：triangle 960Hz、0.62秒 → ポー：triangle 770Hz、0.62秒。2200Hz でやわらかく（高い倍音をしぼる）
+    //   測った結果（0.145 のとき）：ピーク 0.253、250Hz より下を削ったもの RMS 0.841。
+    //   1.13倍にした（見込み：ピーク 0.286、削ったもの RMS 0.950）
     sound: function () {
       var S = Kuruma.sound;
       if (!S) return;
-      var ctx = S.beginSound(0.55, false);
+      var ctx = S.beginSound(1.35, false);
       if (!ctx) return;
       var t = ctx.currentTime;
-      S.tone(ctx, "sine", 660, 660, t, 0.25, 0.13);          // ピー
-      S.tone(ctx, "sine", 550, 550, t + 0.26, 0.25, 0.13);   // ポー
+      S.tone(ctx, "triangle", 960, 960, t, 0.62, 0.164, 2200, 0.75);       // ピー
+      S.tone(ctx, "triangle", 770, 770, t + 0.64, 0.62, 0.164, 2200, 0.75); // ポー
     }
   });
 
   // =====================================================
-  // 7. クレーンしゃ（crane、横 310）
-  //    右に黄色の運転席、左に灰色の台と回る台。ななめに上がった黄色の長いうで（2段）、
-  //    うでの先から細いロープと、丸い銀色のフック（とがらせない）
-  //    仕事：うでが付け根 (90, 140) を中心に 12度 上がって戻る。フックが小さく左右にゆれる。
-  //          上がったとき、うでの上のふちは y 27 くらい（枠の中）
-  //    フック（hook）は、うで（boom）の中には入れない。うでと同じ中心・同じ角度で位置だけ動かし、
+  // 8. クレーンしゃ（crane、横 310）
+  //    右に黄色の運転席、左に灰色の台と回る台。ななめに上がった黄色の長いうで（3段。追加修正1）、
+  //    うでの先から細いロープと、丸い銀色のフック（とがらせない）。
+  //    回る台の上（うでの付け根の左）に、クレーンを動かす小さな運転席（booth。うすい灰色に黄色の帯、窓1つ）
+  //    仕事（追加修正1）：うでが付け根 (90, 140) を中心に 10度 上がり、上がったあと、いちばん先の段が
+  //          うでの向きに 25px のびて、ちぢんで、下がって戻る（0.7秒）。フックはうでの先についていき、小さくゆれる。
+  //    フック（hook）は、うで（boom）の中には入れない。うでと同じ中心・同じ角度・同じのび方で位置だけ動かし、
   //    その中で逆の角度に回して、フックが傾かないようにする
+  //    いちばん動いたとき（傾き 34.82 + 10 = 44.82度、のび 25）の計算：
+  //      うでの中の座標 (x, y) は、絵の座標 (90 + x·cos44.82° + y·sin44.82°, 140 − x·sin44.82° + y·cos44.82°)
+  //      （cos44.82° = 0.7093、sin44.82° = 0.7049）
+  //      ・先の段の右上の角 (175, -6) → (209.9, 12.4)。いちばん上。線をふくめて y 10.9（枠の上 y 5 より下）
+  //      ・先の段の右下の角 (175, 6)  → (218.4, 20.9)。いちばん右（線をふくめて x 220。枠の右 x 305 より左）
+  //      ・滑車 (170, 0) → (210.6, 20.2)。フックはそこから下へ 70 で、y 94 くらいまで。ゆれても x 200〜224
+  //    ふだんの形：滑車は (209, 57.2)、フックの下は y 131 くらい
   // =====================================================
-  var CRANE_ANGLE = -34.82;   // うでの、ふだんの傾き（付け根 (90, 140) から 先 (205, 60) の向き）
+  var CRANE_ANGLE = -34.82;   // うでの、ふだんの傾き（付け根 (90, 140) から 先の向き）
+  var CRANE_TIP = 145;        // 付け根から、ふだんの滑車までの長さ（うでの向き）
   add({
     id: "crane",
     name: "くれーんしゃ",
     width: 310,
     tip: { x: 130, y: 96 },
-    workTime: 600,
+    workTime: 700,
     draw: function () {
       return shadow(156, 140) +
         part("body",
@@ -695,67 +992,95 @@
           '<rect x="40" y="125" width="80" height="30" rx="8" fill="#8a8f96"/>' +
           '<path d="M 46 147 L 114 147" fill="none" stroke="#6e737a" stroke-width="5"/>' +
           '<rect x="292" y="174" width="13" height="12" rx="4" fill="#c8ccd0"/>') +
-        // うで：付け根 (90, 140) を (0, 0) にして回す。中では、うでの向きに沿って描く
+        // クレーンを動かす運転席（回る台の上、うでの付け根の左。x 46〜84、y 96〜127）。
+        // トラックの運転席（黄色）と見分けがつくように、うすい灰色に黄色の帯。窓1つ（中の人は描かない）。
+        // うでは、いちばん上がっても、この運転席の右はし（x 84）より右を通る
+        part("booth",
+          '<path d="M 46 127 L 46 104 Q 46 96 54 96 L 76 96 Q 84 96 84 104 L 84 127 Z" fill="#dfe3e8" stroke="none"/>' +
+          '<rect x="47" y="119" width="36" height="7" fill="#f7c33c" stroke="none"/>' +
+          '<path d="M 46 127 L 46 104 Q 46 96 54 96 L 76 96 Q 84 96 84 104 L 84 127 Z" fill="none"/>' +
+          '<rect x="52" y="101" width="26" height="14" rx="4" fill="#bfe4f5" stroke-width="2.5"/>' +
+          '<path d="M 57 112 L 63 104" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.7"/>') +
+        // うで：付け根 (90, 140) を (0, 0) にして回す。中では、うでの向きに沿って描く。
+        // 3段：付け根の太い段（-8〜82）、まん中の段（70〜128）、先の細い段（85〜150。.boom-ext で先へのびる）。
+        // 先の段は、まん中の段の中に入っている形なので、いちばんうしろに描く
         part("boom",
           '<g transform="translate(90 140)"><g class="boom-rot"><g transform="rotate(' + CRANE_ANGLE + ')">' +
-            // 先の細い段（うしろ）
-            '<rect x="80" y="-8" width="68" height="16" rx="6" fill="#f7c33c"/>' +
-            '<path d="M 86 -3 L 142 -3" fill="none" stroke="#ffd96b" stroke-width="3"/>' +
+            '<g class="boom-ext">' +
+              '<rect x="85" y="-6" width="65" height="12" rx="5" fill="#f7c33c"/>' +
+              '<path d="M 90 -2 L 144 -2" fill="none" stroke="#ffd96b" stroke-width="2.5"/>' +
+              // 先の滑車
+              '<circle cx="' + CRANE_TIP + '" cy="0" r="7" fill="#c8ccd0" stroke-width="2.5"/>' +
+              '<circle cx="' + CRANE_TIP + '" cy="0" r="2" fill="' + LINE + '" stroke="none"/>' +
+            '</g>' +
+            // まん中の段
+            '<rect x="70" y="-8.5" width="58" height="17" rx="6" fill="#f7c33c"/>' +
+            '<path d="M 76 -3.5 L 122 -3.5" fill="none" stroke="#ffd96b" stroke-width="3"/>' +
             // 付け根の太い段（手前）
-            '<rect x="-8" y="-11" width="98" height="22" rx="8" fill="#f7c33c"/>' +
-            '<path d="M 0 -5 L 82 -5" fill="none" stroke="#ffd96b" stroke-width="4"/>' +
-            '<path d="M 0 6 L 82 6" fill="none" stroke="#e0a52a" stroke-width="4"/>' +
-            // 先の滑車と、付け根のピン
-            '<circle cx="140" cy="0" r="7" fill="#c8ccd0" stroke-width="2.5"/>' +
-            '<circle cx="140" cy="0" r="2" fill="' + LINE + '" stroke="none"/>' +
+            '<rect x="-8" y="-11" width="90" height="22" rx="8" fill="#f7c33c"/>' +
+            '<path d="M 0 -5 L 76 -5" fill="none" stroke="#ffd96b" stroke-width="4"/>' +
+            '<path d="M 0 6 L 76 6" fill="none" stroke="#e0a52a" stroke-width="4"/>' +
+            // 付け根のピン
             '<circle r="7" fill="#c8ccd0" stroke-width="2.5"/>' +
           '</g></g></g>') +
-        // ロープとフック：うでの先 (205, 60) ＝ 付け根から (115, -80) のところから、下へ描く
+        // ロープとフック：うでと同じように回して（.hook-follow）、うでの向きに同じだけのばし（.hook-ext）、
+        // 滑車の場所へ移してから、向きを元に戻して（rotate と .hook-upright）、まっすぐ下へ描く
         part("hook",
-          '<g transform="translate(90 140)"><g class="hook-follow">' +
-            '<g transform="translate(115 -80)"><g class="hook-upright"><g class="hook-swing">' +
-              '<path d="M 0 0 L 0 40" fill="none" stroke-width="2"/>' +
-              '<rect x="-7" y="38" width="14" height="10" rx="3" fill="#c8ccd0" stroke-width="2.5"/>' +
-              '<path d="M 0 48 L 0 53 Q 9 53 9 61 Q 9 70 0 70 Q -8 70 -8 63" fill="none" stroke-width="8"/>' +
-              '<path d="M 0 48 L 0 53 Q 9 53 9 61 Q 9 70 0 70 Q -8 70 -8 63" fill="none" stroke="#c8ccd0" stroke-width="4"/>' +
-            '</g></g></g>' +
-          '</g></g>') +
+          '<g transform="translate(90 140)"><g class="hook-follow"><g transform="rotate(' + CRANE_ANGLE + ')">' +
+            '<g class="hook-ext"><g transform="translate(' + CRANE_TIP + ' 0) rotate(' + (-CRANE_ANGLE) + ')">' +
+              '<g class="hook-upright"><g class="hook-swing">' +
+                '<path d="M 0 0 L 0 40" fill="none" stroke-width="2"/>' +
+                '<rect x="-7" y="38" width="14" height="10" rx="3" fill="#c8ccd0" stroke-width="2.5"/>' +
+                '<path d="M 0 48 L 0 53 Q 9 53 9 61 Q 9 70 0 70 Q -8 70 -8 63" fill="none" stroke-width="8"/>' +
+                '<path d="M 0 48 L 0 53 Q 9 53 9 61 Q 9 70 0 70 Q -8 70 -8 63" fill="none" stroke="#c8ccd0" stroke-width="4"/>' +
+              '</g></g>' +
+            '</g></g>' +
+          '</g></g></g>') +
         cab(225, 300, 100, 195, YELLOW) +
         lights(295, 166, 10, 160) +
         tire(60) + tire(150) + tire(260);
     },
     css:
-      ".kuruma-car .boom-rot, .kuruma-car .hook-follow, .kuruma-car .hook-upright, .kuruma-car .hook-swing { transform-origin: 0 0; }\n" +
-      /* うでと、フックの位置は、同じ動き（同じ角度・同じ時間）。フックは逆の角度で回して、まっすぐ下を向いたままにする */
-      ".kc-crane.kw-on .boom-rot, .kc-crane.kw-on .hook-follow { animation: kuruma-crane-boom 0.6s ease-in-out; }\n" +
-      ".kc-crane.kw-on .hook-upright { animation: kuruma-crane-upright 0.6s ease-in-out; }\n" +
-      ".kc-crane.kw-on .hook-swing { animation: kuruma-crane-swing 0.6s ease-in-out; }\n" +
-      "@keyframes kuruma-crane-boom { 0% { transform: rotate(0deg); } 40%, 55% { transform: rotate(-12deg); }" +
+      ".kuruma-car .boom-rot, .kuruma-car .boom-ext, .kuruma-car .hook-follow, .kuruma-car .hook-ext," +
+      " .kuruma-car .hook-upright, .kuruma-car .hook-swing { transform-origin: 0 0; }\n" +
+      /* うでと、フックの位置は、同じ動き（同じ角度・同じのび・同じ時間）。フックは逆の角度で回して、まっすぐ下を向いたままにする */
+      ".kc-crane.kw-on .boom-rot, .kc-crane.kw-on .hook-follow { animation: kuruma-crane-boom 0.7s ease-in-out; }\n" +
+      ".kc-crane.kw-on .boom-ext, .kc-crane.kw-on .hook-ext { animation: kuruma-crane-ext 0.7s ease-in-out; }\n" +
+      ".kc-crane.kw-on .hook-upright { animation: kuruma-crane-upright 0.7s ease-in-out; }\n" +
+      ".kc-crane.kw-on .hook-swing { animation: kuruma-crane-swing 0.7s ease-in-out; }\n" +
+      /* 上がってから のびて、ちぢめてから下がる */
+      "@keyframes kuruma-crane-boom { 0% { transform: rotate(0deg); } 30%, 82% { transform: rotate(-10deg); }" +
       " 100% { transform: rotate(0deg); } }\n" +
-      "@keyframes kuruma-crane-upright { 0% { transform: rotate(0deg); } 40%, 55% { transform: rotate(12deg); }" +
+      "@keyframes kuruma-crane-upright { 0% { transform: rotate(0deg); } 30%, 82% { transform: rotate(10deg); }" +
       " 100% { transform: rotate(0deg); } }\n" +
-      "@keyframes kuruma-crane-swing { 0%, 30% { transform: rotate(0deg); } 55% { transform: rotate(6deg); }" +
-      " 78% { transform: rotate(-5deg); } 100% { transform: rotate(0deg); } }\n",
-    // 「ウィーン カチャ」：やわらかい上がる音（180→260Hz、0.4秒）と、小さな「カチャ」。0.53秒
+      "@keyframes kuruma-crane-ext { 0%, 30% { transform: translateX(0); } 50%, 62% { transform: translateX(25px); }" +
+      " 82%, 100% { transform: translateX(0); } }\n" +
+      "@keyframes kuruma-crane-swing { 0%, 45% { transform: rotate(0deg); } 62% { transform: rotate(5deg); }" +
+      " 80% { transform: rotate(-4deg); } 100% { transform: rotate(0deg); } }\n",
+    // 「ウィーン カチャ」：やわらかい上がる音（180→260Hz）と、小さな「カチャ」。0.7秒
+    //   追加修正1：形はそのまま。うでの のびる動きに合わせて「ウィーン」を 0.4秒 → 0.6秒にし、大きくした
+    //   （triangle 0.14 → 0.18、まるみ 0.05 → 0.065、カチャ 0.08・0.06 → 0.18・0.14）。
+    //   測った結果（0.207・0.075・0.207・0.161 のとき）：ピーク 0.498、250Hz より下を削ったもの RMS 0.806。
+    //   1.18倍にした（見込み：ピーク 0.588、削ったもの RMS 0.951）
     sound: function () {
       var S = Kuruma.sound;
       if (!S) return;
-      var ctx = S.beginSound(0.6, false);
+      var ctx = S.beginSound(0.7, false);
       if (!ctx) return;
       var t = ctx.currentTime;
-      S.tone(ctx, "triangle", 180, 260, t, 0.4, 0.14, 1000, 0.6);  // ウィーン
-      S.tone(ctx, "sine", 180, 260, t, 0.4, 0.05, 0, 0.6);          // ウィーン（まるみ）
-      S.noise(ctx, t + 0.45, 0.05, 0.08, 1200);                      // カ
-      S.noise(ctx, t + 0.48, 0.05, 0.06, 1800);                      // チャ
+      S.tone(ctx, "triangle", 180, 260, t, 0.6, 0.244, 1000, 0.7);  // ウィーン
+      S.tone(ctx, "sine", 180, 260, t, 0.6, 0.089, 0, 0.7);         // ウィーン（まるみ）
+      S.noise(ctx, t + 0.62, 0.05, 0.244, 1200);                    // カ
+      S.noise(ctx, t + 0.65, 0.05, 0.19, 1800);                     // チャ
     }
   });
 
   // =====================================================
-  // 8. パトカー（police、横 270）
+  // 9. パトカー（police、横 270）
   //    まるみのある乗用車の形。上の半分が白、下の半分（y 155 から下）が黒。窓2枚。
   //    屋根のまん中に赤いランプ（横長）。文字・紋章・マークは描かない。
   //    運転席と車体がひと続きなので cab は作らず、body と window
-  //    仕事：ランプが1回光る
+  //    仕事：ランプが1回光る（形は動かない。光の輪は x 103〜167、y 62〜126 で、枠の中）
   // =====================================================
   var POLICE_BODY = "M 15 182 L 15 152 Q 15 140 28 140 L 60 140 L 78 108 Q 82 100 92 100 L 180 100 " +
     "Q 190 100 196 108 L 218 140 L 238 142 Q 255 145 255 160 L 255 182 Q 255 195 242 195 L 28 195 Q 15 195 15 182 Z";
@@ -789,13 +1114,18 @@
         lights(249, 166, 10, 160) +
         tire(70, 23) + tire(205, 23);
     },
-    // 「ウーン」：1回だけ、ゆっくり上がって下がる やさしい音（sine。450 → 600 → 450Hz、0.7秒）
+    // 「ウーウー」：本物に近い、上がって下がるサイレンを2回（追加修正1）。1.4秒
+    //   ウー：triangle 450 → 850 → 450Hz、0.7秒（鳴り始め 0.08秒、7割まで同じ大きさ）を2回。1800Hz でやわらかく
+    //   測った結果（0.15 のとき）：ピーク 0.264、250Hz より下を削ったもの RMS 0.835。
+    //   1.14倍にした（見込み：ピーク 0.301、削ったもの RMS 0.952）
     sound: function () {
       var S = Kuruma.sound;
       if (!S) return;
-      var ctx = S.beginSound(0.75, false);
+      var ctx = S.beginSound(1.4, false);
       if (!ctx) return;
-      S.glide(ctx, "sine", [450, 600, 450], ctx.currentTime, 0.7, 0.13, 0, 0.1);
+      var t = ctx.currentTime;
+      S.glide(ctx, "triangle", [450, 850, 450], t, 0.7, 0.171, 1800, 0.08, 0.7);         // ウー
+      S.glide(ctx, "triangle", [450, 850, 450], t + 0.7, 0.7, 0.171, 1800, 0.08, 0.7);   // ウー
     }
   });
 

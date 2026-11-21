@@ -371,7 +371,8 @@
 
       // ===== 設定（数字を変えると動きが変わります） =====
       // くるまの順番（最後のあとは最初に戻る）。となり合うくるまの主な色が、かぶらないように並べてある
-      var ORDER = ["mixer", "dump", "bulldozer", "garbage", "fire", "ambulance", "crane", "police"];
+      // （しょべるかー〈黄色〉は、ブルドーザー〈黄色〉ととなりにならないように、緑と赤のあいだに入れた）
+      var ORDER = ["mixer", "dump", "bulldozer", "garbage", "shovel", "fire", "ambulance", "crane", "police"];
       var TAPS_TO_END = 6;     // だいたい何回さわると右はしに着くか
       var MIN_STEP = 40;       // 1歩の最低の長さ（px。せまい画面では、6回より少なく着く）
       var HOME_URL = "../../index.html"; // トップ画面

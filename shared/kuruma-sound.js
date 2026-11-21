@@ -2,6 +2,7 @@
    はたらくくるま 共通の部品：音（Kuruma.sound）
    ・ブラウザの機能 Web Audio API で、その場で音を作る（音声ファイルは使わない）
    ・全体の音量 0.5、同時に鳴らす音は3つまで、鳴り始めと終わりは ふわっと
+   ・全体の音量のあとに「音の上限をおさえる仕組み」を入れて、重なっても割れないようにする
    ・iPhone / iPad のために、さわったとき・指を離したときに、音の道具を動かし直す
    ・音の大きさを数字で測れるように、スピーカーの代わりに「音を作るだけの道具」
      （OfflineAudioContext）へ鳴らす作り方（render）も用意している
@@ -16,10 +17,24 @@
   var VOLUME = 0.5;        // 全体の音量（0〜1。0.5 = 最大の半分くらい）
   var MAX_VOICES = 3;      // 同時に鳴らす音の数の上限（連打しても音が重なりすぎないように）
   var HORN_GAP = 200;      // クラクション「プッ」を、次に鳴らせるまでの間隔（ミリ秒）
+  var NOISE_SECONDS = 0.8; // 「ザーッ」という音のもとの長さ（秒）。ダンプカーの「ザザー」（0.7秒）が入る長さ
+
+  // 音の上限をおさえる仕組み（DynamicsCompressor）の設定。
+  // 全体の音量つまみ（master）のあとに入れて、音が3つ重なっても、割れたり急に大きくなったりしないようにする。
+  //   1つの音（いちばん大きいところが 0.3 くらいまで）は、ほとんどそのまま通る。
+  //   重なって 0.5（-6dB）をこえたところから、ゆるやかに（6dB の幅で）おさえ始め、こえたぶんを 1/12 にする。
+  //   ※ この仕組みは、決まりで「全体を少し持ち上げる」（Edge で測って だいたい 1.27倍）。
+  //     全体の音量 0.5 を変えないように、そのあとで同じぶん（LIMIT_UNDO）下げて元の大きさに戻す
+  var LIMIT_THRESHOLD = -6;    // おさえ始める大きさ（dB）
+  var LIMIT_UNDO = 0.79;       // 持ち上がったぶんを戻す（1 ÷ 1.27）
+  var LIMIT_KNEE = 6;          // ゆるやかにおさえ始める幅（dB）
+  var LIMIT_RATIO = 12;        // こえたぶんを何分の1にするか
+  var LIMIT_ATTACK = 0.003;    // おさえ始めるまでの時間（秒）
+  var LIMIT_RELEASE = 0.25;    // おさえるのをやめるまでの時間（秒）
 
   var audioCtx = null;     // 音を作る道具（最初に画面を触ったときに用意する）
   var master = null;       // 全体の音量つまみ
-  var noiseBuffer = null;  // 「シャッ」という音のもとになる「ザーッ」という音
+  var noiseBuffer = null;  // 「シャッ」「ザザー」という音のもとになる「ザーッ」という音
   var voices = 0;          // いま鳴っている音の数
   var muted = false;       // 音を消しているか
 
@@ -28,6 +43,26 @@
   var out = null;
   var outNoise = null;
   var renderCtx = null;    // 計測中だけ入る「時刻をずらした計測用の道具」
+
+  // 音の上限をおさえる仕組みを作って、from → おさえる仕組み → to とつなぐ。
+  // ゲーム（スピーカー）と、大きさを測る道具（render）の両方で、この同じ関数を使う
+  function connectLimiter(ctx, from, to) {
+    if (!ctx.createDynamicsCompressor) {   // とても古いブラウザでは、そのままつなぐ
+      from.connect(to);
+      return;
+    }
+    var limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = LIMIT_THRESHOLD;
+    limiter.knee.value = LIMIT_KNEE;
+    limiter.ratio.value = LIMIT_RATIO;
+    limiter.attack.value = LIMIT_ATTACK;
+    limiter.release.value = LIMIT_RELEASE;
+    var undo = ctx.createGain();
+    undo.gain.value = LIMIT_UNDO;
+    from.connect(limiter);
+    limiter.connect(undo);
+    undo.connect(to);
+  }
 
   // 音を作る道具を用意する（ブラウザの決まりで、画面を触る前は音を出せない）
   function getAudio() {
@@ -38,10 +73,11 @@
 
       master = audioCtx.createGain();
       master.gain.value = muted ? 0 : VOLUME;
-      master.connect(audioCtx.destination); // スピーカーにつなぐ
+      // 全体の音量つまみ → 音の上限をおさえる仕組み → スピーカー
+      connectLimiter(audioCtx, master, audioCtx.destination);
 
-      // 「ザーッ」という音（0.3秒分）を作っておく
-      var length = Math.floor(audioCtx.sampleRate * 0.3);
+      // 「ザーッ」という音（NOISE_SECONDS 秒分）を作っておく
+      var length = Math.floor(audioCtx.sampleRate * NOISE_SECONDS);
       noiseBuffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate);
       var data = noiseBuffer.getChannelData(0);
       for (var i = 0; i < data.length; i++) {
@@ -115,8 +151,10 @@
   // tone とちがい、大きさの形は1つのまま（途中で小さくならない）で、高さだけを変える
   //   freqs  … 高さの並び（例：[450, 600, 450]。長さの中に、同じ間隔で並べて、なめらかに変える）
   //   attack … 鳴り始めに何秒かけて大きくするか（0.02 より短くしない。省略で 0.02）
-  function glide(ctx, type, freqs, start, length, peak, filterFreq, attack) {
+  //   holdRatio … 長さのうち、どこまで同じ大きさを保つか（省略すると 0.5 = 半分まで）
+  function glide(ctx, type, freqs, start, length, peak, filterFreq, attack, holdRatio) {
     attack = Math.max(0.02, attack || 0.02);
+    if (holdRatio === undefined) holdRatio = 0.5;
     var osc = ctx.createOscillator();
     var gain = ctx.createGain();
     osc.type = type;
@@ -127,7 +165,7 @@
     // ふわっと始まって、少し続いて、ふわっと終わる
     gain.gain.setValueAtTime(0.0001, start);
     gain.gain.linearRampToValueAtTime(peak, start + attack);
-    gain.gain.setValueAtTime(peak, start + Math.max(attack, length * 0.5));
+    gain.gain.setValueAtTime(peak, start + Math.max(attack, length * holdRatio));
     gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
 
     osc.connect(gain);
@@ -144,10 +182,11 @@
     osc.stop(start + length + 0.05);
   }
 
-  // 「シャッ」という音を1つ鳴らす部品（1本目と同じ。鳴り始めは 0.01秒）
-  //   length は 0.3秒まで（もとの「ザーッ」が 0.3秒ぶんのため）
+  // 「シャッ」「ザザー」という音を1つ鳴らす部品（1本目と同じ。鳴り始めは 0.01秒）
+  //   length は NOISE_SECONDS（0.8秒）まで（もとの「ザーッ」の長さのため）
   //   bandFreq … 残す高さ。キンキンしないように 3200Hz 以下で使う
-  function noise(ctx, start, length, peak, bandFreq) {
+  //   holdRatio … 長さのうち、どこまで同じ大きさを保つか（省略すると 0 = すぐに小さくなり始める。1本目と同じ）
+  function noise(ctx, start, length, peak, bandFreq, holdRatio) {
     var src = ctx.createBufferSource();
     src.buffer = outNoise;
     var filter = ctx.createBiquadFilter();
@@ -156,6 +195,9 @@
     var gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, start);
     gain.gain.linearRampToValueAtTime(peak, start + 0.01);
+    if (holdRatio) {
+      gain.gain.setValueAtTime(peak, start + Math.max(0.01, length * holdRatio));
+    }
     gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
 
     src.connect(filter);
@@ -208,7 +250,8 @@
     lfo.stop(start + length + 0.05);
   }
 
-  // ===== 共通の音（8台とも同じ。1本目と同じ値） =====
+  // ===== 共通の音（9台とも同じ。1本目と同じ値） =====
+  // 走りさる「ブーーン」は、仕事の音の大きさの基準でもある（聞きくらべのページで、くらべて測る）
 
   // 入ってきて止まったときの音：「ピポッ♪」
   function playArrive() {
@@ -266,7 +309,7 @@
   var renderNoiseData = null;
   function getRenderNoise(rate) {
     if (!renderNoiseData || renderNoiseData.rate !== rate) {
-      var data = new Float32Array(Math.floor(rate * 0.3));
+      var data = new Float32Array(Math.floor(rate * NOISE_SECONDS));   // ゲームと同じ長さ
       var seed = 12345;                    // 決まった順番の「でたらめな数」を作る
       for (var i = 0; i < data.length; i++) {
         seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -281,7 +324,7 @@
   //   fn   … 鳴らす関数（playArrive や、くるまの仕事の音など）
   //   opts … times（何回鳴らすか。省略で 1）、gap（何秒おきか。省略で 0.25）、
   //           seconds（1回ぶんの長さ。省略で 1.0）、rate（1秒あたりの数。省略で 44100）
-  // ゲームと同じく、全体の音量 VOLUME を通して作る
+  // ゲームと同じく、全体の音量 VOLUME → 音の上限をおさえる仕組み を通して作る
   function render(fn, opts) {
     opts = opts || {};
     var times = opts.times || 1;
@@ -295,8 +338,8 @@
     var off = new OAC(1, Math.ceil(rate * total), rate);
     var offMaster = off.createGain();
     offMaster.gain.value = VOLUME;
-    offMaster.connect(off.destination);
-    var offNoise = off.createBuffer(1, Math.floor(rate * 0.3), rate);
+    connectLimiter(off, offMaster, off.destination);   // ゲームと同じ形
+    var offNoise = off.createBuffer(1, Math.floor(rate * NOISE_SECONDS), rate);
     offNoise.getChannelData(0).set(getRenderNoise(rate));
 
     var keepOut = out, keepNoise = outNoise;
@@ -336,6 +379,7 @@
     VOLUME: VOLUME,
     MAX_VOICES: MAX_VOICES,
     HORN_GAP: HORN_GAP,
+    NOISE_SECONDS: NOISE_SECONDS,
     prepare: getAudio,
     beginSound: beginSound,
     tone: tone,
