@@ -371,9 +371,11 @@
       var K = window.Kuruma;
 
       // ===== 設定（数字を変えると動きが変わります） =====
-      // くるまの順番（最後のあとは最初に戻る）。となり合うくるまの主な色が、かぶらないように並べてある
-      // （しょべるかー〈黄色〉は、ブルドーザー〈黄色〉ととなりにならないように、緑と赤のあいだに入れた）
-      var ORDER = ["mixer", "dump", "bulldozer", "garbage", "shovel", "fire", "ambulance", "crane", "police"];
+      // 出てくるくるま18台（図鑑が増えても、このゲームが勝手に変わらないように、ここにはっきり書く）。
+      // 順番は、袋に入れてまぜる（18台が1回ずつ出たら、まぜ直す）。同じくるまは続かず、
+      // となり合うくるまの主な色（図鑑の color）も、できるだけ かぶらない
+      var IDS = ["mixer", "dump", "bulldozer", "garbage", "shovel", "fire", "ambulance", "crane", "police",
+                 "grader", "tanker", "tractor", "taxi", "tow", "sports", "roller", "bus", "doubledecker"];
       var TAPS_TO_END = 6;     // だいたい何回さわると右はしに着くか
       var MIN_STEP = 40;       // 1歩の最低の長さ（px。せまい画面では、6回より少なく着く）
       var HOME_URL = "../../index.html"; // トップ画面
@@ -390,7 +392,7 @@
       var homeBtn = document.getElementById("homeBtn");
 
       // 共通の部品を用意する
-      var order = K.stage.order(ORDER);
+      var order = K.stage.randomOrder(IDS, function (id) { return K.cars.get(id).color; }, Math.random);
       var mover = K.stage.mover(carBox);     // 左右に動かす
       var waiter = K.stage.waiter(carBox);   // ぷるぷる
       var hopper = K.stage.hopper(carHop);   // ぴょん

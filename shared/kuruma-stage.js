@@ -1,6 +1,6 @@
 /* =====================================================
    はたらくくるま 共通の部品：くるまの順番と、基本の動き（Kuruma.stage）
-   ・くるまの順番（最後のあとは最初に戻る）
+   ・くるまの順番（order：最後のあとは最初に戻る。randomOrder：袋からランダムに出す）
    ・位置へ動かす（transition で translateX。動くあいだ .moving が付いて、タイヤが回る）
    ・走りさる先（右の外 +20px）と、入ってくる元（左の外：くるまの横幅 + 20px 外）、速さの計算
    ・ぷるぷる（さわらなくなってから 1.5秒）と、ぴょん（はねる）
@@ -35,6 +35,90 @@
       next: function () {
         i = (i + 1) % list.length;
         return list[i];
+      }
+    };
+  }
+
+  // ===== くるまの順番（ランダム。袋方式） =====
+  //   list    … 図鑑の名前の一覧
+  //   colorOf … colorOf(id) で、そのくるまの主な色の組を返す関数（例：図鑑の color）
+  //   rand    … ランダムのもと（0 以上 1 未満の数を返す関数。省略か関数でないときは Math.random）。
+  //             決まった数の並びを渡すと、同じ順番になる（テスト用）
+  // 一覧の全部のくるまを袋に入れてまぜ、1台ずつ出す。出しきったら、また袋を作る。
+  //   ・同じくるまが続かない（袋の変わり目でも）
+  //   ・となり合うくるまの色の組が、できるだけ かぶらない。
+  //     まぜた並びを TRIES 回ためして、かぶりの点数がいちばん小さいものを使う（0 点が出たら、そこでやめる）。
+  //     どうしても かぶるときも、いちばん少ない並びで進む（止まらない）
+  // 返すもの：order() と同じ形 { current(), next() }
+  var TRIES = 200;           // 1つの袋を作るとき、まぜる回数の上限
+
+  function randomOrder(list, colorOf, rand) {
+    var items = list.slice();
+    var pick = (typeof rand === "function") ? rand : Math.random;
+    var colorFn = (typeof colorOf === "function") ? colorOf : function (id) { return id; };
+    var last = null;         // いま出ているくるま
+    var queue = [];          // この袋の、まだ出ていないくるま
+
+    // まぜる（フィッシャー–イェーツ）。元の並びは変えない
+    function shuffle(arr) {
+      var a = arr.slice();
+      for (var i = a.length - 1; i > 0; i--) {
+        var j = Math.floor(pick() * (i + 1));
+        if (j > i) j = i;    // rand が 1 を返してしまっても、はみ出さない
+        var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+      }
+      return a;
+    }
+
+    // 並び seq を、前のくるま prev のあとに出したときの「かぶりの点数」
+    function cost(seq, prev) {
+      var c = 0;
+      if (seq.length === 0) return 0;
+      if (prev !== null) {
+        if (seq[0] === prev) c += 1000;                          // 同じくるまが続く（いちばん悪い）
+        else if (colorFn(seq[0]) === colorFn(prev)) c += 1;      // 袋の変わり目で、色がかぶる
+      }
+      for (var i = 1; i < seq.length; i++) {
+        if (colorFn(seq[i]) === colorFn(seq[i - 1])) c += 1;     // 袋の中で、色がかぶる
+      }
+      return c;
+    }
+
+    // 新しい袋を作る
+    function refill() {
+      var best = [];
+      var bestCost = Infinity;
+      for (var t = 0; t < TRIES; t++) {
+        var s = shuffle(items);
+        var c = cost(s, last);
+        if (c < bestCost) { best = s; bestCost = c; }
+        if (c === 0) break;
+      }
+      // 念のため：先頭が前のくるまと同じままなら（2台以上のとき）、先頭と、2番目以降のどれかを入れかえる。
+      // 入れかえたあとの点数がいちばん小さいものを選ぶ（同じ点数なら、小さい添字）
+      if (items.length > 1 && last !== null && best[0] === last) {
+        var pickIndex = 1;
+        var pickCost = Infinity;
+        for (var k = 1; k < best.length; k++) {
+          var trial = best.slice();
+          var tmp = trial[0]; trial[0] = trial[k]; trial[k] = tmp;
+          var tc = cost(trial, last);
+          if (tc < pickCost) { pickIndex = k; pickCost = tc; }
+        }
+        var swap = best[0]; best[0] = best[pickIndex]; best[pickIndex] = swap;
+      }
+      queue = best;
+    }
+
+    refill();
+    last = queue.shift();
+
+    return {
+      current: function () { return last; },
+      next: function () {
+        if (queue.length === 0) refill();
+        last = queue.shift();
+        return last;
       }
     };
   }
@@ -159,6 +243,7 @@
     MAX_MOVE_TIME: MAX_MOVE_TIME,
     WAIT_TIME: WAIT_TIME,
     order: order,
+    randomOrder: randomOrder,
     mover: mover,
     timeFor: timeFor,
     exitX: exitX,
