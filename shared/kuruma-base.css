@@ -1,0 +1,212 @@
+/* =====================================================
+   はたらくくるま 共通の見た目（kuruma-base.css）
+   ・拡大・スクロール・文字選択・長押しメニューを止める
+   ・大人用ボタン2つ（音を消す・トップ画面へ戻る）の見た目と場所
+   ・指マーク「さわってね」、ぷるぷる、ぴょん、紙ふぶき
+   ・上の ひらがな1行の文字の見た目（文と場所は、ゲームの側で決める）
+   ・動きを減らす設定への対応
+   値は1本目（しょべるかー）と同じ。
+   ===================================================== */
+
+/* ===== 画面全体 ===== */
+html, body {
+  touch-action: none;              /* 2本指の拡大・ダブルタップ拡大・スクロールを止める */
+  overscroll-behavior: none;       /* 画面のはしを引っぱったときの「びよーん」を止める */
+}
+
+body {
+  margin: 0;
+  height: 100vh;                   /* 古いブラウザ用 */
+  height: 100dvh;                  /* アドレスバーの出し入れに合わせた高さ */
+  overflow: hidden;                /* はみ出してもスクロールバーを出さない */
+  font-family: system-ui, sans-serif;
+  -webkit-user-select: none;       /* 連打しても文字が選択されないように（Safari 用） */
+  user-select: none;
+  -webkit-touch-callout: none;     /* 長押ししてもメニューが出ないように（iPhone / iPad 用） */
+  -webkit-tap-highlight-color: transparent; /* タップしたときの青いハイライトを消す */
+}
+
+/* ===== 上の ひらがな1行の文字 =====
+   太字、丸みのある端末の書体、こげ茶の文字に白いふちどり。
+   折り返さない（2行になると、低い画面で くるまや指マークを圧迫するため） */
+.kuruma-message {
+  margin: 0;
+  font-weight: bold;
+  /* 端末に入っている、丸みのある書体を先に試す（なければ ふつうの書体）。外から読み込まない */
+  font-family: "Hiragino Maru Gothic ProN", "BIZ UDPGothic", system-ui, sans-serif;
+  color: #5a3d1e;                  /* こげ茶（くるまの線と同じ色） */
+  white-space: nowrap;
+  text-align: center;
+  /* 白いふちどり：白い影を上下左右ななめに少しずつずらして重ねる */
+  text-shadow:
+    3px 0 0 #fff, -3px 0 0 #fff, 0 3px 0 #fff, 0 -3px 0 #fff,
+    2px 2px 0 #fff, -2px 2px 0 #fff, 2px -2px 0 #fff, -2px -2px 0 #fff,
+    0 0 6px #fff;
+  pointer-events: none;            /* 文字の上をさわっても、ふつうに くるまが動く */
+}
+
+/* ===== 大人用のボタン（右上に2つ。どちらも2秒長押し） ===== */
+.adult-btn {
+  position: fixed;
+  top: 12px;
+  z-index: 4;                      /* いちばん手前に出す */
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 3px solid transparent;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  font-size: 24px;
+  line-height: 1;
+  color: #5a3d1e;
+  opacity: 0.6;                    /* ふだんは目立たせない（子どもが気にしないように） */
+  cursor: pointer;
+  display: flex;                   /* 中の絵（絵文字・SVG）を、ボタンのまん中にそろえる */
+  align-items: center;
+  justify-content: center;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+  transition: transform 0.2s;
+}
+/* 中の絵をさわっても、ボタンをさわったことにする */
+.adult-btn > * {
+  pointer-events: none;
+}
+/* 長押ししているあいだ、2秒かけて少しずつ大きくなる（「押せているよ」の合図） */
+.adult-btn.pressing {
+  transform: scale(1.3);
+  transition: transform 2s linear;
+}
+
+/* 音を消すボタン：上から 12px、右から 12px */
+.mute-btn {
+  right: 12px;
+}
+/* 音を消しているときは、はっきり見えるようにする（大きく、赤いふち） */
+.mute-btn.muted {
+  width: 64px;
+  height: 64px;
+  font-size: 32px;
+  opacity: 1;
+  background: #fff;
+  border-color: #e53935;
+}
+
+/* トップ画面へ戻るボタン：音を消すボタンの左どなり（ボタンの右はしが、画面の右から 96px）。
+   音を消しているボタン（64px）が押されて 1.3倍になっても、10px くらい あく */
+.home-btn {
+  right: 96px;
+}
+.home-btn svg {
+  display: block;
+  width: 26px;
+  height: 26px;
+}
+
+/* ===== 指マーク「さわってね」 =====
+   場所（left・bottom）と、小さくする率（--hs）は、JavaScript が決める。
+   ゆっくり上下（1往復 1秒、下へ 8px）。点滅しない */
+.finger-hint {
+  position: absolute;
+  width: calc(40px * var(--hs, 1));
+  height: calc(48px * var(--hs, 1));   /* kuruma-touch.js の HINT_HEIGHT と同じ */
+  z-index: 1;                      /* 指先が屋根に重なったとき、くるまの絵より手前に出す */
+  pointer-events: none;            /* 指マークがタッチを吸わないように（上をさわっても くるまが動く） */
+  /* ふだんは見えない。消えるときは 0.4秒かけて、ふわっとうすくなる */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.4s ease, visibility 0s linear 0.4s;
+}
+/* .show が付いているあいだ見える。出るときも 0.4秒かけて、ふわっと */
+.finger-hint.show {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.4s ease, visibility 0s;
+}
+.finger-hint svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  /* 指先が屋根を「ちょん」とつつくように、下へ 8px 動く。上には動かない */
+  animation: tsuntsun 1s ease-in-out infinite;
+}
+@keyframes tsuntsun {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(8px); }
+}
+
+/* ===== 待っているあいだの「ぷるぷる」 =====
+   .waiting が付いた箱の中の .kuruma-wobble が、0.5秒でくり返し ゆれる（上下 4px、かたむき 1.5度） */
+.kuruma-wobble {
+  transform-origin: center bottom;
+}
+.waiting .kuruma-wobble {
+  animation: purupuru 0.5s ease-in-out infinite;
+}
+@keyframes purupuru {
+  0%   { transform: translateY(0)    rotate(0deg); }
+  25%  { transform: translateY(-4px) rotate(-1.5deg); }
+  50%  { transform: translateY(0)    rotate(0deg); }
+  75%  { transform: translateY(-4px) rotate(1.5deg); }
+  100% { transform: translateY(0)    rotate(0deg); }
+}
+
+/* ===== 走りさり・入ってくるあいだにさわったときの「ぴょん」 =====
+   .hop が付くと、0.3秒で1回だけ上に 12px はねて、元の高さに戻る。
+   「その場にとどまる」設定を付けていないので、終わると必ず元の高さに戻る */
+.kuruma-hop.hop {
+  animation: pyon 0.3s ease-out;
+}
+@keyframes pyon {
+  0%   { transform: translateY(0); }
+  40%  { transform: translateY(-12px); }
+  100% { transform: translateY(0); }
+}
+
+/* ===== 紙ふぶき =====
+   画面の上の外から、ゆっくり回りながら落ちる（2〜3秒）。最後は ふわっと うすくなって消える。
+   1回ぶんを1つのグループ（.kuruma-confetti）にまとめ、落ちきったら JavaScript がグループごと消す。
+   さわる操作のじゃまをしない（pointer-events: none）。点滅しないように、平らに回すだけ（裏返さない） */
+.kuruma-confetti {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+}
+.kuruma-confetti-piece {
+  position: absolute;
+  top: -16px;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+  /* 落ちる時間（--fall）と、落ち始めるまでの時間（--delay）は、1枚ずつ JavaScript が決める。
+     both：落ち始める前は、上の外（見えないところ）で待つ */
+  animation: kamifubuki var(--fall, 2.2s) linear var(--delay, 0s) both;
+}
+.kuruma-confetti-piece.round {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+@keyframes kamifubuki {
+  0%   { transform: translate(0, 0)                rotate(0deg);                        opacity: 1; }
+  25%  { transform: translate(var(--sway, 16px), 24vh) rotate(calc(var(--spin, 360deg) * 0.25)); }
+  50%  { transform: translate(0, 48vh)             rotate(calc(var(--spin, 360deg) * 0.5)); }
+  70%  { transform: translate(var(--sway, 16px), 66vh) rotate(calc(var(--spin, 360deg) * 0.7)); opacity: 1; }
+  100% { transform: translate(0, 88vh)             rotate(var(--spin, 360deg));          opacity: 0; }
+}
+
+/* ===== 動きを減らす設定の端末では、ぷるぷる・指マークの上下・紙ふぶきを止める =====
+   （指マーク自体は表示する。「ぴょん」と仕事の動きは、さわったときの小さな返事なので残す） */
+@media (prefers-reduced-motion: reduce) {
+  .waiting .kuruma-wobble { animation: none; }
+  .finger-hint svg { animation: none; }
+  .kuruma-confetti { display: none; }
+}

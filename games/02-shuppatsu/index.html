@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <!-- スマホやタブレットでもちょうどいい大きさで表示するための設定 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>はたらくくるま しゅっぱつ！</title>
+
+  <!-- 全部のゲームで使う、共通の見た目（拡大を止める・大人用ボタン・指マーク・ぷるぷる・紙ふぶき） -->
+  <link rel="stylesheet" href="../../shared/kuruma-base.css">
+
+  <style>
+    body {
+      background: #d8f0ff;           /* 空の色（背景の絵が出るまでの、念のための色） */
+    }
+
+    /* =====================================================
+       背景（晴れた日の、町はずれの広い道）
+         .scenery … 上 75%：空・太陽・雲・丘・家並み・木・草地
+         .road    … 下 25%：道（くるまは、この上のふちを走る）
+       ===================================================== */
+    .scenery {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      /* 道の層と 2px 重ねる（画面の高さが端数のとき、境目に 1px のすき間が出ないように） */
+      height: calc(75vh + 2px);
+      height: calc(75dvh + 2px);
+      overflow: hidden;
+      /* 丘の絵の高さ。横幅の 1/3 か、この層の高さの 42% の、大きいほう（ただし 92% まで） */
+      --hills: min(max(33.4vw, 42%), 92%);
+      /* 太陽（右上。ふんわりにじむだけ）と、空のグラデーション（上が濃く、下がうすい） */
+      background:
+        radial-gradient(circle 20vmin at 80% 13%,
+          #fff6c8 0%, rgba(255, 246, 200, 0.85) 30%, rgba(255, 246, 200, 0) 100%),
+        linear-gradient(#8ccbf0 0%, #d8f0ff 100%);
+    }
+    /* 縦長の画面では、丘を高めにして、上半分が空だけにならないようにする */
+    @media (orientation: portrait) {
+      .scenery { --hills: min(max(33.4vw, 56%), 92%); }
+    }
+
+    /* 雲：画面2つぶんの横長の帯に、同じ並びを2回くり返して置き、とてもゆっくり左へ流す（CSS だけで動かす）。
+       帯の半分（= 画面1つぶん）動いたところで最初に戻るので、つなぎ目が見えない。
+       上の文字と大人用ボタンの後ろを通らないように、帯は上から 84px より下に置く */
+    .clouds {
+      position: absolute;
+      left: 0;
+      top: 84px;
+      width: 200%;
+      height: max(60px, calc(100% - 84px - var(--hills) * 0.6));
+      animation: kumo 160s linear infinite;   /* 1周 160秒 */
+    }
+    @keyframes kumo {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+    .cloud {
+      position: absolute;
+      display: block;
+      height: auto;
+      aspect-ratio: 120 / 56;
+    }
+    .cloud-l { width: clamp(100px, 13vw, 200px); }
+    .cloud-m { width: clamp(80px, 10vw, 150px); }
+    .cloud-s { width: clamp(60px, 7vw, 110px); }
+    .cloud-low { display: none; }               /* 低い雲は、縦長の画面だけ */
+    @media (orientation: portrait) {
+      .cloud-low { display: block; }
+    }
+    /* 高さの低い画面：空がせまいので、雲を小さく・少なくする */
+    @media (max-height: 500px) {
+      .cloud-l { width: 76px; }
+      .cloud-m { width: 60px; }
+      .cloud-s { display: none; }
+    }
+
+    /* 丘・家並み・木・草地（下のはしを、道の上のふちにぴったり合わせる） */
+    .hills {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: var(--hills);
+      display: block;
+    }
+
+    /* 道（下 25%）。やさしい灰色に、上のふちの明るい線と、小さな点のでこぼこ。
+       白線・矢印・文字は描かない */
+    .road {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 25vh;
+      height: 25dvh;
+      box-sizing: border-box;
+      border-top: 5px solid #d3d6db;
+      background-color: #b9bcc2;
+      background-image:
+        radial-gradient(circle, #a4a8ae 2.5px, rgba(164, 168, 174, 0) 3px),
+        radial-gradient(circle, #a4a8ae 2px, rgba(164, 168, 174, 0) 2.5px);
+      background-size: 96px 52px, 140px 70px;
+      background-position: 18px 20px, 70px 46px;
+      overflow: hidden;
+    }
+
+    /* 手前の草の株（道の下のはし）。くるまにはかからない */
+    .tuft {
+      position: absolute;
+      bottom: 3%;
+      height: clamp(24px, 6vh, 46px);
+      width: auto;
+      aspect-ratio: 60 / 40;
+      display: block;
+    }
+    .tuft-1 { left: 3%; }
+    .tuft-2 { left: 34%; }
+    .tuft-3 { left: 63%; }
+    .tuft-4 { right: 3%; }
+
+    /* 雲・木・草の株の形を1か所に書いておくための、見えない SVG */
+    .svg-defs {
+      position: absolute;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+    }
+
+    /* ===== 上の文字「さわると うごくよ！」 =====
+       広い画面（横幅 560px 以上）：上から 30px。右上の2つのボタンを避けて、左右に 160px ずつあけて、まん中に出す。
+         文字の大きさは、あいている幅に入るように（横幅 667px で 約 29px、768px 以上で 32px）
+       せまい画面（560px より小さい）：ボタンの段より下（上から 92px）に出す */
+    .message {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 30px;
+      padding: 0 160px;
+      font-size: clamp(18px, calc((100vw - 320px) / 12), 32px);
+      line-height: 1.3;
+      z-index: 2;                    /* くるまや地面と重なっても、文字を手前に出す */
+    }
+    @media (max-width: 559.98px) {
+      .message {
+        top: 92px;
+        padding: 0 12px;
+        font-size: clamp(20px, 6vw, 32px);
+      }
+    }
+
+    /* ===== くるま全体 =====
+       4つの箱を重ねて、役割を分けています（1本目と同じ）。
+         .car           … 左右の「位置」を受け持つ（右に動く）
+         .car-size      … 「大きさ」を受け持つ（小さい画面では縮める）
+         .kuruma-hop    … 「はねる」を受け持つ（走りさり・入ってくるあいだにさわると、ぴょん）
+         .kuruma-wobble … 「ぷるぷる」を受け持つ（待っているあいだ ゆれる）
+       指マークは .car の中で .car-size の外に置く。くるまといっしょに左右に動き、
+       ぷるぷる・はねる・縮める動きは受けない */
+    .car {
+      position: absolute;
+      left: 0;
+      /* 道の上のふちの明るい線に、タイヤが乗るように、少しだけ下げる */
+      bottom: calc(25vh - 6px);
+      bottom: calc(25dvh - 6px);
+      width: 300px;                  /* くるまごとの横幅は、JavaScript が図鑑の値で入れる */
+      height: 220px;
+      z-index: 1;
+    }
+    .car-size,
+    .car .kuruma-hop,
+    .car .kuruma-wobble {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+    }
+    .car-size {
+      transform-origin: left bottom; /* 縮めるときは左下を基準にする（地面から浮かないように） */
+    }
+
+    /* 動きを減らす設定では、雲の流れも止める */
+    @media (prefers-reduced-motion: reduce) {
+      .clouds { animation: none; }
+    }
+  </style>
+</head>
+<body data-scene="play" data-car="mixer">
+
+  <!-- 雲・木・草の株の形（ここに1回だけ書いて、<use> で何回も使う）。この SVG 自体は見えない -->
+  <svg class="svg-defs" aria-hidden="true" focusable="false">
+    <defs>
+      <!-- 丸い木1本。根もとが (0, 0)、上に向かって y がマイナスになる -->
+      <g id="bgTree">
+        <g fill="#5a3d1e">
+          <circle cx="-18" cy="-70" r="24"/>
+          <circle cx="18" cy="-72" r="24"/>
+          <circle cx="0" cy="-98" r="28"/>
+        </g>
+        <g fill="#74963a">
+          <circle cx="-18" cy="-70" r="22"/>
+          <circle cx="18" cy="-72" r="22"/>
+        </g>
+        <g fill="#8fb34a">
+          <circle cx="-18" cy="-78" r="19"/>
+          <circle cx="18" cy="-80" r="19"/>
+          <circle cx="0" cy="-98" r="26"/>
+        </g>
+        <g fill="#b5c95a">
+          <circle cx="9" cy="-110" r="10"/>
+          <circle cx="24" cy="-88" r="6"/>
+        </g>
+        <path d="M -5 0 L -4 -50 L 4 -50 L 5 0 Z" fill="#8a5a3c" stroke="#5a3d1e" stroke-width="2" stroke-linejoin="round"/>
+      </g>
+
+      <!-- 小さな家1けん。下のまん中が (0, 0)。文字・看板は描かない -->
+      <g id="bgHouseA" stroke="#5a3d1e" stroke-width="1.5" stroke-linejoin="round">
+        <rect x="-15" y="-22" width="30" height="22" fill="#f6ead8"/>
+        <path d="M -20 -20 L 0 -38 L 20 -20 Z" fill="#e88a6a"/>
+        <rect x="-6" y="-15" width="12" height="8" rx="1.5" fill="#bfe4f5"/>
+      </g>
+      <g id="bgHouseB" stroke="#5a3d1e" stroke-width="1.5" stroke-linejoin="round">
+        <rect x="-18" y="-20" width="36" height="20" fill="#fbe3c4"/>
+        <path d="M -22 -18 L -12 -34 L 12 -34 L 22 -18 Z" fill="#7aa6d6"/>
+        <rect x="-12" y="-14" width="9" height="7" rx="1.5" fill="#bfe4f5"/>
+        <rect x="4" y="-14" width="9" height="7" rx="1.5" fill="#bfe4f5"/>
+      </g>
+      <g id="bgHouseC" stroke="#5a3d1e" stroke-width="1.5" stroke-linejoin="round">
+        <rect x="-12" y="-26" width="24" height="26" fill="#f6ead8"/>
+        <path d="M -16 -24 L 0 -40 L 16 -24 Z" fill="#9cc47a"/>
+        <rect x="-5" y="-18" width="10" height="8" rx="1.5" fill="#bfe4f5"/>
+      </g>
+
+      <!-- 雲（もこもこ）。下にうすい青の影、その上に白。輪かくなし -->
+      <g id="bgCloud">
+        <path fill="#dcebf7"
+              d="M 14 52 Q 2 52 4 42 Q 6 32 18 34 Q 20 18 38 20 Q 46 8 62 12 Q 76 6 84 20 Q 100 16 104 30 Q 118 32 116 44 Q 114 54 102 54 Z"/>
+        <path fill="#ffffff"
+              d="M 14 47 Q 2 47 4 37 Q 6 27 18 29 Q 20 13 38 15 Q 46 3 62 7 Q 76 1 84 15 Q 100 11 104 25 Q 118 27 116 39 Q 114 48 102 48 Z"/>
+      </g>
+
+      <!-- 手前の草の株（ギザギザ）。使う場所より前に書いておく -->
+      <g id="bgTuft" stroke="#5a3d1e" stroke-width="2" stroke-linejoin="round">
+        <path fill="#86bd52" d="M 4 40 Q 10 24 6 8 Q 16 22 18 40 Z"/>
+        <path fill="#86bd52" d="M 36 40 Q 48 26 58 20 Q 50 32 50 40 Z"/>
+        <path fill="#a8d465" d="M 14 40 Q 22 18 22 2 Q 30 20 30 40 Z"/>
+        <path fill="#a8d465" d="M 26 40 Q 36 16 46 10 Q 40 26 40 40 Z"/>
+      </g>
+    </defs>
+  </svg>
+
+  <!-- ===== 背景1：空と景色（上 75%） ===== -->
+  <div class="scenery" aria-hidden="true">
+
+    <!-- 雲（左半分と右半分に、同じ並びで置く）。cloud-low は、縦長の画面だけに出す低い雲 -->
+    <div class="clouds">
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 3%; top: 8%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-m cloud-low" viewBox="0 0 120 56" style="left: 10%; top: 76%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-s" viewBox="0 0 120 56" style="left: 17%; top: 40%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-m" viewBox="0 0 120 56" style="left: 27%; top: 20%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-s cloud-low" viewBox="0 0 120 56" style="left: 33%; top: 66%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 40%; top: 2%;"><use href="#bgCloud"/></svg>
+
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 53%; top: 8%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-m cloud-low" viewBox="0 0 120 56" style="left: 60%; top: 76%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-s" viewBox="0 0 120 56" style="left: 67%; top: 40%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-m" viewBox="0 0 120 56" style="left: 77%; top: 20%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-s cloud-low" viewBox="0 0 120 56" style="left: 83%; top: 66%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 90%; top: 2%;"><use href="#bgCloud"/></svg>
+    </div>
+
+    <!-- 丘・家並み・木・草地。横長の絵を、画面いっぱいに広げて、はみ出た左右は切る（slice）。
+         背景は くるまより目立たないように、色を少しうすめにしてある -->
+    <svg class="hills" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMax slice">
+      <!-- 遠くの丘（奥。うすく） -->
+      <path fill="#a9d98b" opacity="0.55"
+            d="M 0 225 C 150 170 300 160 440 198 C 560 232 660 210 760 176 C 880 136 1010 142 1200 188 L 1200 400 L 0 400 Z"/>
+      <!-- 遠くの丘（手前） -->
+      <path fill="#a9d98b"
+            d="M 0 282 C 140 244 280 240 420 262 C 560 286 700 272 820 250 C 960 224 1080 236 1200 258 L 1200 400 L 0 400 Z"/>
+
+      <!-- 丘のふもとの、小さな家並み（くるまより ずっと小さく） -->
+      <g opacity="0.92">
+        <use href="#bgHouseA" transform="translate(205 300)"/>
+        <use href="#bgHouseC" transform="translate(250 302)"/>
+        <use href="#bgHouseB" transform="translate(545 304)"/>
+        <use href="#bgHouseA" transform="translate(815 300)"/>
+        <use href="#bgHouseB" transform="translate(868 303)"/>
+        <use href="#bgHouseC" transform="translate(1035 300)"/>
+      </g>
+
+      <!-- 丸い木 -->
+      <use href="#bgTree" transform="translate(110 330) scale(0.62)"/>
+      <use href="#bgTree" transform="translate(420 326) scale(0.5)"/>
+      <use href="#bgTree" transform="translate(690 330) scale(0.6)"/>
+      <use href="#bgTree" transform="translate(965 328) scale(0.52)"/>
+      <use href="#bgTree" transform="translate(1125 332) scale(0.66)"/>
+
+      <!-- 道の上（奥がわ）の、細い草地の帯 -->
+      <path fill="#a8d465"
+            d="M 0 324 C 220 314 420 322 600 320 C 800 318 1000 312 1200 322 L 1200 400 L 0 400 Z"/>
+      <!-- 草地の濃いところ -->
+      <g fill="#86bd52" opacity="0.5">
+        <ellipse cx="260" cy="356" rx="130" ry="8"/>
+        <ellipse cx="860" cy="368" rx="160" ry="9"/>
+        <ellipse cx="540" cy="378" rx="90" ry="6"/>
+      </g>
+      <!-- 小さな花（黄・白・ピンク）を少しだけ -->
+      <g>
+        <circle cx="80" cy="358" r="4.5" fill="#f5d34a"/>
+        <circle cx="96" cy="366" r="4" fill="#ffffff"/>
+        <circle cx="310" cy="372" r="4" fill="#f2a7b8"/>
+        <circle cx="470" cy="344" r="4" fill="#ffffff"/>
+        <circle cx="486" cy="350" r="4.5" fill="#f5d34a"/>
+        <circle cx="760" cy="376" r="4" fill="#f2a7b8"/>
+        <circle cx="940" cy="384" r="4.5" fill="#f5d34a"/>
+        <circle cx="956" cy="378" r="4" fill="#ffffff"/>
+        <circle cx="1090" cy="360" r="4" fill="#f2a7b8"/>
+      </g>
+      <!-- 草地の手前のふち（道との境目） -->
+      <path fill="#86bd52"
+            d="M 0 393 C 300 389 600 395 900 390 C 1000 388 1100 392 1200 391 L 1200 400 L 0 400 Z"/>
+    </svg>
+  </div>
+
+  <!-- ===== 背景2：道（下 25%） ===== -->
+  <div class="road" aria-hidden="true">
+    <svg class="tuft tuft-1" viewBox="0 0 60 40"><use href="#bgTuft"/></svg>
+    <svg class="tuft tuft-2" viewBox="0 0 60 40"><use href="#bgTuft"/></svg>
+    <svg class="tuft tuft-3" viewBox="0 0 60 40"><use href="#bgTuft"/></svg>
+    <svg class="tuft tuft-4" viewBox="0 0 60 40"><use href="#bgTuft"/></svg>
+  </div>
+
+  <p class="kuruma-message message">さわると うごくよ！</p>
+
+  <!-- 大人用のボタン（どちらも2秒長押し）。トップ画面へ戻る・音を消す -->
+  <button class="adult-btn home-btn" id="homeBtn" type="button" aria-label="もどる（2びょう ながおし）">
+    <!-- おうちの形（三角の屋根、四角いかべ、まん中に戸） -->
+    <svg viewBox="0 0 26 26" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="#5a3d1e" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M 6 11.5 L 6 23 L 20 23 L 20 11.5" fill="#fff3c4"/>
+        <path d="M 2.5 13 L 13 3.5 L 23.5 13"/>
+        <path d="M 10.5 23 L 10.5 17 L 15.5 17 L 15.5 23"/>
+      </g>
+    </svg>
+  </button>
+  <button class="adult-btn mute-btn" id="muteBtn" type="button" aria-label="おとを けす（2びょう ながおし）">🔊</button>
+
+  <!-- ===== くるま（絵は図鑑 kuruma-cars.js が作って、.kuruma-wobble の中に入れる） ===== -->
+  <div class="car" id="car">
+    <div class="car-size" id="carSize">
+      <div class="kuruma-hop" id="carHop">
+        <div class="kuruma-wobble" id="carWobble"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 全部のゲームで使う、共通の部品（音 → さわる操作 → くるまの図鑑 → 順番と動き の順に読み込む） -->
+  <script src="../../shared/kuruma-sound.js"></script>
+  <script src="../../shared/kuruma-touch.js"></script>
+  <script src="../../shared/kuruma-cars.js"></script>
+  <script src="../../shared/kuruma-stage.js"></script>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var K = window.Kuruma;
+
+      // ===== 設定（数字を変えると動きが変わります） =====
+      // くるまの順番（最後のあとは最初に戻る）。となり合うくるまの主な色が、かぶらないように並べてある
+      var ORDER = ["mixer", "dump", "bulldozer", "garbage", "fire", "ambulance", "crane", "police"];
+      var TAPS_TO_END = 6;     // だいたい何回さわると右はしに着くか
+      var MIN_STEP = 40;       // 1歩の最低の長さ（px。せまい画面では、6回より少なく着く）
+      var HOME_URL = "../../index.html"; // トップ画面
+      var START_X = K.stage.START_X;     // スタート地点（左から 20px）
+      var MOVE_TIME = K.stage.MOVE_TIME; // ふつうの1歩の時間（0.6秒）
+
+      // ページの部品を取り出す
+      var carBox = document.getElementById("car");          // 位置の箱
+      var carSize = document.getElementById("carSize");     // 大きさの箱
+      var carHop = document.getElementById("carHop");       // はねる箱
+      var carWobble = document.getElementById("carWobble"); // ぷるぷるの箱（この中に絵を入れる）
+      var message = document.querySelector(".message");     // 上の文字
+      var muteBtn = document.getElementById("muteBtn");
+      var homeBtn = document.getElementById("homeBtn");
+
+      // 共通の部品を用意する
+      var order = K.stage.order(ORDER);
+      var mover = K.stage.mover(carBox);     // 左右に動かす
+      var waiter = K.stage.waiter(carBox);   // ぷるぷる
+      var hopper = K.stage.hopper(carHop);   // ぴょん
+
+      // 指マーク：位置の箱の中で、大きさの箱の外に置く。ページを開いたときは出ている
+      var hint = K.touch.createHint();
+      carBox.insertBefore(hint, carSize);
+      // 5秒さわらなかったら、指マークをまた出す（走りさり・入ってくるあいだは出さない）
+      var hintTimer = K.touch.hintTimer(function () {
+        if (scene === "play" || scene === "edge") {
+          placeHint();
+          K.touch.showHint(hint);
+        }
+      });
+
+      var car = null;      // いまのくるま（図鑑が作ったもの）
+      var scale = 1;       // いまの大きさ（1 = もとの大きさ）
+      var scene = "play";  // いまの場面（play・edge・leave・enter）
+
+      // ===== 場面とくるまを、<body> に書く（テストの台本が場面を待てるように） =====
+      function setScene(value) {
+        scene = value;
+        document.body.setAttribute("data-scene", value);
+      }
+
+      // くるまを替える（古い絵を外して、新しい絵を入れる）
+      function setCar(id) {
+        if (car && car.el.parentNode) car.el.parentNode.removeChild(car.el);
+        car = K.cars.create(id);
+        carWobble.appendChild(car.el);
+        carBox.style.width = car.width + "px";
+        document.body.setAttribute("data-car", id);
+      }
+
+      // ===== 大きさと、1歩の長さ =====
+      function updateSize() {
+        scale = K.touch.fitScale();
+        carSize.style.transform = "scale(" + scale + ")";
+      }
+      // いまの見た目の横幅
+      function carWidth() {
+        return car.width * scale;
+      }
+      // 1回に進む距離：画面の広さに合わせて、だいたい TAPS_TO_END 回で右はしに着くようにする（最低 40px）
+      function stepLength() {
+        return Math.max(MIN_STEP, (window.innerWidth - carWidth() - START_X) / TAPS_TO_END);
+      }
+      // newX にいても、画面の中におさまるか。
+      // 「+ 1」は、小数の計算でごくわずかにはみ出したときも「おさまる」と判定するためのゆとり
+      function fits(newX) {
+        return newX + carWidth() <= window.innerWidth + 1;
+      }
+      // x にいるとき、次の1歩が画面からはみ出すなら edge、おさまるなら play
+      function decideEdge(x) {
+        setScene(fits(x + stepLength()) ? "play" : "edge");
+      }
+
+      // ===== 指マークの場所 =====
+      // 指先を、図鑑に書いた場所（屋根の上）に置く。上の文字と、右上の2つのボタンに重なるときは、
+      // 共通の部品の計算（④）で、小さくする・下げる
+      function placeHint() {
+        var tip = car.tip;
+        var fromBottom = (car.height - tip.y) * scale;          // くるまの下のはしから指先まで
+        var groundTop = carBox.getBoundingClientRect().bottom;  // くるまの下のはし（画面の上から）
+        var tipX = mover.x + tip.x * scale;                     // 指先（画面の左から。動いている途中なら行き先）
+        var tipY = groundTop - fromBottom;                      // 指先（画面の上から）
+        var fit = K.touch.hintFit(tipX, tipY, [message, homeBtn, muteBtn]);
+        hint.style.setProperty("--hs", fit.scale);
+        hint.style.left = (tip.x * scale - K.touch.HINT_TIP_X * fit.scale) + "px";
+        hint.style.bottom = (fromBottom - fit.drop) + "px";
+      }
+
+      // ===== 画面のどこかに指がふれた瞬間 =====
+      // （大人用のボタンへのタッチと、2本目からの指は、共通の部品が はぶいてくれる）
+      K.touch.onTap(function () {
+        // さわったので、指マークを消す（走りさり中のタッチもふくむ）
+        K.touch.hideHint(hint);
+        hintTimer.stop();
+
+        // 走りさり・入ってくるあいだは、進まずに「プッ」と鳴らして、ぴょんとはねるだけ。
+        // 移動や、入ってくるためのタイマーには、さわらない（止まる位置・時刻が変わらないように）
+        if (scene === "leave" || scene === "enter") {
+          K.sound.playHorn();
+          hopper.hop();
+          return;
+        }
+
+        waiter.stop();
+        var step = stepLength();
+        var nextX = mover.x + step;
+
+        if (fits(nextX)) {
+          // まだ画面の中におさまる → 1歩すすんで、仕事の動きと音
+          mover.moveTo(nextX, MOVE_TIME);
+          decideEdge(nextX);                 // 次の1歩がはみ出すなら、ここで edge にする
+          car.work();
+          car.sound();
+          waiter.later();                    // 1.5秒さわらなければ、ぷるぷる
+          hintTimer.restart();               // 5秒さわらなければ、指マークをまた出す
+        } else {
+          driveAway(step);
+        }
+      });
+
+      // ===== 右はしから走りさって、次のくるまが左から入ってくる =====
+      function driveAway(step) {
+        setScene("leave");
+
+        // ① 右の外へ走りさる（距離に合わせた時間で）。仕事の動きを1回しながら、「ブーーン」と紙ふぶき
+        var exitTo = K.stage.exitX();
+        var exitTime = K.stage.timeFor(exitTo - mover.x, step);
+        mover.moveTo(exitTo, exitTime);
+        car.work();
+        K.sound.playDrive(exitTime / 1000);  // ミリ秒 → 秒に直して渡す
+        K.stage.confetti();
+
+        setTimeout(function () {
+          // ② 見えないところで、次のくるまに替えて、左の外へ移す
+          setCar(order.next());
+          setScene("enter");
+          var enterFrom = K.stage.enterX(carWidth());
+          mover.moveTo(enterFrom, 0);
+
+          // ③ 左からスーッと入ってきて、スタート地点で止まる（1歩と同じ速さ）
+          var enterTime = K.stage.timeFor(START_X - enterFrom, step);
+          mover.moveTo(START_X, enterTime);
+          setTimeout(arrive, enterTime);
+        }, exitTime);
+      }
+
+      // ④ 止まったら「ピポッ♪」。新しいくるまが、仕事の動きを1回だけ見せる（あいさつ。仕事の音は鳴らさない）
+      function arrive() {
+        setScene("play");
+        K.sound.playArrive();
+        car.work();
+        refit();                 // 走っているあいだに画面の大きさが変わっていたら、ここで合わせる
+        waiter.later();          // 1.5秒たったら、ぷるぷる
+        hintTimer.restart();     // 止まってから5秒で、指マークをまた出す
+      }
+
+      // ===== 画面の大きさ・回転が変わったとき =====
+      // 大きさはいつでも合わせ直す。位置と play・edge は、play か edge のときだけ決め直す
+      // （leave・enter のあいだは、data-scene を書きかえず、移動やタイマーも作り直さない）
+      function refit() {
+        updateSize();
+        if (scene === "play" || scene === "edge") {
+          if (mover.x + carWidth() > window.innerWidth) {
+            mover.moveTo(Math.max(START_X, window.innerWidth - carWidth()), 0);
+          }
+          decideEdge(mover.x);
+          placeHint();
+        }
+      }
+      K.touch.onViewportChange(refit);
+
+      // ===== 大人用のボタン =====
+      // 音を消す・出すを切りかえたら、ボタンの大きさ（52px ↔ 64px）が変わるので、指マークの場所を計算し直す。
+      // 押しているあいだの拡大が戻りきった 0.25秒あとにも、もう一度計算する
+      K.touch.setupMuteButton(muteBtn, function () {
+        if (scene === "play" || scene === "edge") placeHint();
+        setTimeout(function () {
+          if (scene === "play" || scene === "edge") placeHint();
+        }, 250);
+      });
+      K.touch.setupHomeButton(homeBtn, HOME_URL);
+
+      // ===== 最初の準備 =====
+      setCar(order.current());
+      updateSize();
+      mover.moveTo(START_X, 0);
+      decideEdge(START_X);
+      placeHint();
+      K.touch.showHint(hint);    // ページを開いたときは、指マークが出ている
+      waiter.later();            // 1.5秒たったら、ぷるぷる
+    })();
+  </script>
+
+</body>
+</html>
