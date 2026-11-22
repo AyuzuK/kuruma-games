@@ -114,10 +114,11 @@
       overflow: visible;             /* アームの先は絵の枠より少し上に出るので、切らずに見せる */
     }
 
-    /* ===== ボタンを3つ並べる =====
-       横長の画面では左右に、縦長の画面では上下に並べる（ボタンのあいだは 24px）。
-       3つ並べて入らないときは、3つとも同じ率（--k、0.5〜1）で縮める。率は下の JavaScript が、
-       画面の大きさが変わったときに計算して入れる。
+    /* ===== ボタンを4つ並べる =====
+       並べ方は3つ（縦1列 col／横1列 row／2×2 grid）。どれにするかは、下の JavaScript が
+       画面の大きさから「いちばん大きく見える並べ方」を選んで、この箱の data-layout に書く
+       （ボタンのあいだは どれも 24px）。
+       4つ並べて入らないときは、4つとも同じ率（--k、0.35〜1）で縮める。率も JavaScript が入れる。
        ボタンそのものの大きさ・ゆれ・沈み方は変えずに、外がわの箱（.slot-inner）を縮める */
     .games {
       display: flex;
@@ -126,8 +127,18 @@
       justify-content: center;
       gap: 24px;
     }
-    @media (orientation: portrait) {
-      .games { flex-direction: column; }
+    .games[data-layout="col"] {
+      display: flex;
+      flex-direction: column;
+    }
+    .games[data-layout="row"] {
+      display: flex;
+      flex-direction: row;
+    }
+    .games[data-layout="grid"] {
+      display: grid;
+      grid-template-columns: repeat(2, auto);
+      gap: 24px;
     }
     /* 1つぶんの場所。ボタン（ふちをふくめて 312 × 252）＋下の影 10px＋ゆれて上がる 4px ＋ゆとり 2px */
     .slot {
@@ -234,6 +245,27 @@
     .kage-mini { fill: #3a3f4b; }
     .kage-mini [fill]:not([fill="none"]) { fill: #3a3f4b; }
     .kage-mini [stroke]:not([stroke="none"]) { stroke: #3a3f4b; }
+
+    /* ===== 4本目「しゅつどう！ どの くるま？」のボタン =====
+       作りは1〜3本目のボタンと同じ。ふちと下の影の色だけ、あかるい赤にして見分けやすくする */
+    .game-button.shutsudou-button {
+      border-color: #e0605a;
+      box-shadow: 0 10px 0 #a8403b;
+      animation-delay: -0.9s;        /* 1〜3本目のボタンと、ゆれる向きを少しずらす */
+    }
+    .game-button.shutsudou-button.pressed {
+      box-shadow: 0 2px 0 #a8403b;
+    }
+    /* 場面の絵（高い木の ねこを、しょうぼうしゃが助けるところ。ゲームの場面を単純にして写したもの）。
+       座標の枠は 横300 × 縦240（ボタンの中と同じ大きさ）。id は使わない */
+    .shutsudou-svg {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 300px;
+      height: 240px;
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -241,7 +273,7 @@
   <h1 class="title">はたらくくるま</h1>
 
   <!-- ゲームを選ぶボタン（横長の画面では左右、縦長の画面では上下に並ぶ） -->
-  <div class="games" id="games">
+  <div class="games" id="games" data-layout="grid">
   <div class="slot"><div class="slot-inner">
   <!-- ショベルカーのゲームへのボタン。
        ファイルをダブルクリックで開いたときも動くように、index.html まで書く -->
@@ -624,6 +656,50 @@
     </svg>
   </a>
   </div></div>
+
+  <div class="slot"><div class="slot-inner">
+  <!-- 「しゅつどう！ どの くるま？」へのボタン。
+       ファイルをダブルクリックで開いたときも動くように、index.html まで書く -->
+  <a class="game-button shutsudou-button" id="top4-shutsudouGame" href="games/04-shutsudou/index.html" aria-label="しゅつどう どの くるま">
+    <div class="road"></div>
+    <!-- 高い木の ねこを、しょうぼうしゃが はしごで助けるところ（ゲームの場面を単純にして写したもの。
+         この画面では動かさない。文字は入れない）。奥から順に：木 → ねこ → しょうぼうしゃ（はしご） -->
+    <svg class="shutsudou-svg" viewBox="0 0 300 240" aria-hidden="true" focusable="false">
+      <g stroke="#6b4a2f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+        <!-- 木：みき・えだ（左へ）・葉 -->
+        <path d="M 212 198 L 220 92 L 246 92 L 254 198 Z" fill="#a8703f"/>
+        <path d="M 222 102 L 184 86 L 186 77 L 226 91 Z" fill="#a8703f"/>
+        <circle cx="222" cy="60" r="27" fill="#4aa14a"/>
+        <circle cx="264" cy="64" r="22" fill="#4aa14a"/>
+        <circle cx="244" cy="46" r="26" fill="#5cb85c"/>
+        <circle cx="236" cy="78" r="18" fill="#5cb85c"/>
+
+        <!-- ねこ（えだの上に すわっている） -->
+        <path d="M 210 72 Q 224 76 222 92" fill="none" stroke-width="9"/>
+        <path d="M 210 72 Q 224 76 222 92" fill="none" stroke="#f5b556" stroke-width="5"/>
+        <ellipse cx="200" cy="64" rx="9" ry="12" fill="#f5b556" stroke-width="2.5"/>
+        <circle cx="200" cy="46" r="9" fill="#f5b556" stroke-width="2.5"/>
+        <path d="M 192 40 L 193 30 L 199 37 Z M 208 40 L 207 30 L 201 37 Z" fill="#f5b556" stroke-width="2.5"/>
+        <circle cx="196" cy="46" r="1.6" fill="#6b4a2f" stroke="none"/>
+        <circle cx="204" cy="46" r="1.6" fill="#6b4a2f" stroke="none"/>
+
+        <!-- しょうぼうしゃ：はしご（うしろの支点から、ねこのいる えだへ のびる）→ 車体 → 運転席 → タイヤ -->
+        <g transform="translate(34 140) rotate(-19.8)">
+          <path d="M 16 -5 L 16 1 M 32 -5 L 32 1 M 48 -5 L 48 1 M 64 -5 L 64 1 M 80 -5 L 80 1 M 96 -5 L 96 1 M 112 -5 L 112 1 M 128 -5 L 128 1 M 144 -5 L 144 1" fill="none" stroke="#9aa1a8" stroke-width="3"/>
+          <rect x="0" y="-8" width="159" height="6" rx="3" fill="#d9dde2" stroke-width="2.5"/>
+          <rect x="0" y="0" width="159" height="6" rx="3" fill="#d9dde2" stroke-width="2.5"/>
+        </g>
+        <rect x="14" y="142" width="104" height="44" rx="8" fill="#e5483c"/>
+        <path d="M 40 150 L 40 180 M 80 150 L 80 180" fill="none" stroke-width="2"/>
+        <path d="M 114 186 L 114 138 Q 114 128 124 128 L 146 128 Q 154 128 158 138 L 165 160 L 165 180 Q 165 186 159 186 Z" fill="#e5483c"/>
+        <path d="M 122 136 L 144 136 L 153 152 L 122 152 Z" fill="#bfe4f5" stroke-width="2.5"/>
+        <circle cx="34" cy="188" r="14" fill="#4a4a4a"/><circle cx="34" cy="188" r="6" fill="#c8ccd0" stroke-width="2"/>
+        <circle cx="100" cy="188" r="14" fill="#4a4a4a"/><circle cx="100" cy="188" r="6" fill="#c8ccd0" stroke-width="2"/>
+        <circle cx="142" cy="188" r="14" fill="#4a4a4a"/><circle cx="142" cy="188" r="6" fill="#c8ccd0" stroke-width="2"/>
+      </g>
+    </svg>
+  </a>
+  </div></div>
   </div>
 
   <script>
@@ -639,9 +715,11 @@
       });
     });
 
-    // ボタンが3つ並んで画面に入るように、縮める率（0.5〜1）を決める。
-    //   横長の画面：左右に3つ（312 × 3 ＋ あいだ 24 × 2）、縦長の画面：上下に3つ（268 × 3 ＋ あいだ 24 × 2）。
-    //   画面のはしからは 16px、題名とボタンのあいだは 24px あける。
+    // ボタンが4つ並んで画面に入るように、並べ方と、縮める率（0.35〜1）を、いっしょに決める。
+    //   並べ方の候補は3つ：縦1列（col）・横1列（row）・2×2（grid）。それぞれの率を計算して、
+    //   いちばん大きい率の並べ方を選ぶ（同じ率なら grid → col → row の順）。選んだ並べ方は、
+    //   ボタンを並べる箱の data-layout に書き、見た目の切りかえは CSS が行う。
+    //   ボタンの場所は 312 × 268、あいだは 24px、画面のはしからは 16px、題名とボタンのあいだは 24px あける。
     // 画面の大きさが変わったときだけ計算する（すぐ1回と、0.3秒あとにもう1回）
     var games = document.getElementById("games");
     var title = document.querySelector(".title");
@@ -649,15 +727,18 @@
     function fitButtons() {
       var w = window.innerWidth;
       var h = window.innerHeight;
-      var portrait = window.matchMedia("(orientation: portrait)").matches;
       var room = h - 32 - title.offsetHeight - 24;      // 題名の下で、ボタンに使える高さ
-      var k;
-      if (portrait) {
-        k = Math.min(1, (w - 32) / 312, (room - 24 * 2) / (268 * 3));
-      } else {
-        k = Math.min(1, (w - 32 - 24 * 2) / (312 * 3), room / 268);
+      var options = [
+        { layout: "grid", k: Math.min(1, (w - 32 - 24) / (312 * 2), (room - 24) / (268 * 2)) },
+        { layout: "col",  k: Math.min(1, (w - 32) / 312, (room - 24 * 3) / (268 * 4)) },
+        { layout: "row",  k: Math.min(1, (w - 32 - 24 * 3) / (312 * 4), room / 268) }
+      ];
+      var best = options[0];
+      for (var i = 1; i < options.length; i++) {
+        if (options[i].k > best.k) best = options[i];
       }
-      games.style.setProperty("--k", Math.max(0.5, k));
+      games.setAttribute("data-layout", best.layout);
+      games.style.setProperty("--k", Math.max(0.35, best.k));
     }
     function onResize() {
       fitButtons();
