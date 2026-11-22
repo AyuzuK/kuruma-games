@@ -117,6 +117,15 @@
       }
     }
 
+    /* ヒントの文字：1行に入れる（せまい画面では JavaScript が文字を小さくする）。2つの大人用ボタンは右上にあるので、右を広くあける */
+    .message[data-showing="hint"] {
+      white-space: nowrap;
+      padding: 0 160px 0 24px;
+    }
+    @media (max-width: 559.98px) {
+      .message[data-showing="hint"] { padding: 0 12px; }
+    }
+
     /* =====================================================
        場面の絵（「絵のまど」）と、場面の右へのびる細い道
          .scene       … 場面の箱（動かない）。角が丸く、白いふち。中に <svg> が1つ
@@ -209,7 +218,18 @@
     }
 
     /* 動きを減らす設定では、雲の流れも、場面の入れかえの transition も止める */
+    /* くるまに のっていく人・ひっぱられる くるま：助けたあとに ふわっと出る（opacity だけ） */
+    .ride {
+      position: absolute;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 500ms ease;
+    }
+    .ride.shown { opacity: 1; }
+    .ride svg { display: block; overflow: visible; }
+
     @media (prefers-reduced-motion: reduce) {
+      .ride { transition: none; }
       .clouds { animation: none; }
       .sc-before, .sc-after { transition: none; }
     }
@@ -294,7 +314,7 @@
   <!-- 場面の右へのびる細い道（場面の箱より奥に置く。位置と大きさは JavaScript が書く） -->
   <div class="scene-road" id="sceneRoad" aria-hidden="true"></div>
 
-  <!-- data-showing：いま出している文字の種類（title ＝ 「どの くるまが いく？」、name ＝ くるまの名前） -->
+  <!-- data-showing：いま出している文字の種類（title ＝ 「どの くるまが いく？」、name ＝ くるまの名前、hint ＝ ヒントの文字） -->
   <p class="kuruma-message message" id="message" data-showing="title">どの くるまが いく？</p>
 
   <!-- 大人用のボタン（どちらも2秒長押し）。トップ画面へ戻る・音を消す -->
@@ -379,6 +399,8 @@
       var ENTER_TOTAL = 1500;    // 入ってくるのに かかる時間
       var REDUCED_FADE = 450;    // 動きを減らす設定：行く・出るの ふわっと の時間（合わせて DRIVE_IN と同じ）
       var REDUCED_LEAVE = 500;   // 動きを減らす設定：走りさりの代わりに その場で消える時間
+      var HINT_TEXT_DELAY = 10000;   // 問題が出てから、ヒントの文字を出すまで（さわっていても、いなくても同じ。1問に1回）
+      var MIN_HINT_FONT = 14;    // ヒントの文字の大きさの下限（せまい画面では、横に入る大きさまで小さくする）
       var NUDGE_TIME = 8000;     // 2問目から：さわらないでいると「えらんでね」を1回出すまで
       var MIN_STEP = 40;         // 1歩の長さの最低（走る時間の計算のもと）
       var STEP_DIV = 6;          // 1歩の長さ ＝ 画面の横幅 ÷ これ
@@ -543,6 +565,36 @@
         return '<g transform="translate(' + x + ' ' + y + ') scale(' + s + ')">' + inner + '</g>';
       }
 
+      // ----- くるまに のっていく人（お客さん・バスていの みんな）-----
+      //   場面（まっているところ）と、くるまの まどの中（のったところ）で、同じ服・同じ髪にする
+      var OKYAKU_LOOK = { shirt: "#f7d548", pants: "#4a90d9" };
+      var BUS_PPL = [      // おとな2人（s 1.0）・こども2人（s 0.78）
+        { x: 306, s: 1.0,  o: { shirt: "#f0807f", pants: "#5b78b8", hair: "#4a3326" } },
+        { x: 346, s: 0.78, o: { shirt: "#f7d548", pants: "#7a8f5a", hair: "#6b4a2f", skin: "#e9b98f" } },
+        { x: 388, s: 1.0,  o: { shirt: "#4a90d9", pants: "#6b5a4a", hair: "#4a3326", skin: "#e9b98f" } },
+        { x: 432, s: 0.78, o: { shirt: "#5cb85c", pants: "#5b78b8", hair: "#6b4a2f" } }
+      ];
+      // くるまの まど（図鑑の絵の座標：x, y, 横, 縦, 角の丸み）。のる人の顔は、ここに重ねて、まどの形で切りとる。
+      // 並びは、のる人の順（おとな・こども・おとな・こども）に合わせる
+      var RIDE_WINDOWS = {
+        taxi: [[97, 108, 34, 28, 6]],                                                        // うしろのドアの窓
+        bus: [[40, 74, 31, 48, 5], [76, 74, 31, 48, 5], [112, 74, 31, 48, 5], [148, 74, 31, 48, 5]],
+        doubledecker: [[82, 96, 42, 40, 5], [72, 34, 36, 40, 5], [134, 96, 42, 40, 5], [156, 34, 36, 40, 5]]   // 下・上・下・上
+      };
+      // まどの中の人1人（上半身。まどの形で切りとる。clipPath の id は uid で作るたびに変える）
+      function riderSvg(win, who, uid) {
+        var kid = who.s < 1;
+        var sc = kid ? 0.62 : 0.8;
+        var cx = win[0] + win[2] / 2;
+        var cy = win[1] + win[3] * (kid ? 0.6 : 0.46);        // 頭のまん中
+        var o = {};
+        for (var k in who.o) o[k] = who.o[k];
+        o.legs = false;
+        return '<clipPath id="' + uid + '"><rect x="' + (win[0] + 1.25) + '" y="' + (win[1] + 1.25) + '" width="' + (win[2] - 2.5) + '" height="' + (win[3] - 2.5) + '" rx="' + win[4] + '"/></clipPath>' +
+          '<g clip-path="url(#' + uid + ')"><g transform="translate(' + cx + ' ' + (cy + 60 * sc) + ') scale(' + sc + ')">' +
+          hBody(o) + hFace("happy", -1) + '</g></g>';
+      }
+
       // ----- 動物の顔（ねこ・こいぬ）の小さな道具 -----
       function dotEyes(x1, x2, y) {
         return '<circle cx="' + x1 + '" cy="' + y + '" r="1.7" fill="' + LN + '"/><circle cx="' + x2 + '" cy="' + y + '" r="1.7" fill="' + LN + '"/>';
@@ -607,49 +659,48 @@
         return layers(base, before, after);
       }
 
-      // ----- 2. obaachan：休んでいる おばあちゃん（くるまは左 → おうちは右） -----
+      // ----- 2. obaachan：休んでいる おばあちゃん（くるまは左 → 1階建ての おうちは右） -----
+      //   1階建ての おうち。大きな まど（へやの中が見える）に、おばあちゃんを大きく描く
       function drawObaachan() {
-        function futon(left) {
-          return '<rect x="' + left + '" y="128" width="' + (438 - left) + '" height="46" rx="16" fill="#d4a373" ' + LNS + '/>' +
-            '<path d="M ' + left + ' 142 Q ' + left + ' 128 ' + (left + 14) + ' 128 L 430 128" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>';
-        }
-        var base = sky() + cloud(110, 50, 1.1) + cloud(190, 112, 0.7) + grass(226) + road() +
-          // おうち：やね・かべ・大きな まど（中は へや）
+        var HAIR = "#cfcfd4";
+        var base = sky() + cloud(110, 50, 1.1) + cloud(150, 104, 0.7) + grass(226) + road() +
+          // おうち：ひくい やね・かべ・大きな まど（中は へや）・とびら
           '<g ' + LNS + '>' +
-          '<rect x="232" y="38" width="230" height="208" fill="#f3e3d3"/>' +
-          '<path d="M 224 40 L 347 4 L 470 40 Z" fill="#e07a5f"/>' +
-          '<rect x="402" y="196" width="30" height="50" rx="3" fill="#c28a5a"/>' +
-          '<rect x="250" y="52" width="194" height="128" fill="#fff3d6" stroke="#8a5a3a" stroke-width="6"/>' +
-          '<rect x="253" y="164" width="188" height="13" fill="#e8d3a8" stroke="none"/>' +
-          '<path d="M 347 52 L 347 180" stroke="#8a5a3a" stroke-width="5"/>' +
-          '<rect x="244" y="178" width="206" height="8" rx="2" fill="#8a5a3a"/>' +
-          // まくらもとの小さな台
-          '<rect x="258" y="148" width="36" height="30" rx="3" fill="#b98a5a"/>' +
-          // まくら
-          '<rect x="296" y="120" width="56" height="26" rx="11" fill="#ffffff"/>' +
+          '<rect x="206" y="110" width="268" height="136" fill="#f3e3d3"/>' +
+          '<path d="M 202 114 L 340 52 L 478 114 Z" fill="#e07a5f"/>' +
+          '<rect x="446" y="192" width="22" height="54" rx="3" fill="#c28a5a"/>' +
+          '<circle cx="462" cy="220" r="1.8" fill="#6b4a2f" stroke="none"/>' +
+          '<rect x="218" y="122" width="212" height="104" fill="#fff3d6" stroke="#8a5a3a" stroke-width="6"/>' +
+          '<rect x="221" y="205" width="206" height="18" fill="#e8d3a8" stroke="none"/>' +
+          '<rect x="210" y="226" width="224" height="8" rx="2" fill="#8a5a3a"/>' +
           // 手前の やぶ
-          '<circle cx="238" cy="240" r="14" fill="#5cb85c"/><circle cx="256" cy="244" r="12" fill="#4aa14a"/></g>';
-        // ふとんに寝て、おでこに青い氷のう。目はおだやかに とじている（つらそうな顔にしない）
-        var before = '<g ' + LNS + '>' +
-          '<circle cx="324" cy="124" r="17" fill="#e9b98f"/>' +
-          '<path d="M 307 121 A 17 17 0 0 1 341 121 Q 324 108 307 121 Z" fill="#cfcfd4"/>' +
-          '<ellipse cx="324" cy="112" rx="13" ry="8" fill="#6fb4e8"/></g>' +
-          '<path d="M 312 112 Q 324 106 336 112" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"/>' +
-          '<path d="M 314 127 Q 318 131 322 127 M 326 127 Q 330 131 334 127 M 320 135 Q 324 138 328 135" fill="none" stroke="' + LN + '" stroke-width="1.8" stroke-linecap="round"/>' +
-          futon(340);
-        // ふとんの上に すわって、目をあけて にっこり。氷のうはなし。まくらもとに小さな花
+          '<circle cx="214" cy="240" r="14" fill="#5cb85c"/><circle cx="234" cy="245" r="11" fill="#4aa14a"/></g>';
+        // ふとんに寝て、おでこに青い氷のう。目はおだやかに とじている（つらそうな顔にしない）。あたまは大きく
+        var before = '<rect x="236" y="182" width="178" height="26" rx="12" fill="#e3b98a" ' + LNS + '/>' +
+          '<g ' + LNS + '>' +
+          '<rect x="244" y="150" width="64" height="32" rx="13" fill="#ffffff"/>' +
+          '<circle cx="276" cy="158" r="23" fill="#e9b98f"/>' +
+          '<path d="M 253 154 A 23 23 0 0 1 299 154 Q 276 138 253 154 Z" fill="' + HAIR + '"/>' +
+          '<ellipse cx="276" cy="141" rx="16" ry="9" fill="#6fb4e8"/></g>' +
+          '<path d="M 264 140 Q 276 134 288 140" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round"/>' +
+          '<path d="M 264 160 Q 268 164 272 160 M 280 160 Q 284 164 288 160 M 270 171 Q 276 174 282 171" fill="none" stroke="' + LN + '" stroke-width="2" stroke-linecap="round"/>' +
+          '<rect x="294" y="170" width="120" height="38" rx="15" fill="#d4a373" ' + LNS + '/>' +
+          '<path d="M 296 182 Q 296 170 310 170 L 404 170" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>';
+        // ふとんの上に すわって、目をあけて にっこり。手をふる。氷のうはなし。そばに小さな花
         var after = '<g ' + LNS + '>' +
-          '<rect x="304" y="108" width="44" height="56" rx="18" fill="#e8a0a0"/>' +
-          '<circle cx="326" cy="72" r="8" fill="#cfcfd4"/>' +
-          '<circle cx="326" cy="90" r="16" fill="#e9b98f"/>' +
-          '<path d="M 310 87 A 16 16 0 0 1 342 87 Q 326 76 310 87 Z" fill="#cfcfd4"/></g>' +
-          '<path d="M 317 91 Q 320 86 323 91 M 329 91 Q 332 86 335 91" fill="none" stroke="' + LN + '" stroke-width="1.9" stroke-linecap="round"/>' +
-          smile(326, 97) + cheeks(320, 332, 96) +
-          futon(300) +
-          '<g ' + LNT + '><rect x="266" y="138" width="14" height="11" rx="3" fill="#6fb4e8"/>' +
-          '<path d="M 273 138 L 273 130" fill="none"/>' +
-          '<ellipse cx="268" cy="131" rx="5" ry="2.6" fill="#5cb85c" transform="rotate(-25 268 131)"/>' +
-          '<circle cx="273" cy="127" r="6" fill="#e8506c"/><circle cx="273" cy="127" r="2" fill="#f7d548" stroke="none"/></g>';
+          '<rect x="262" y="168" width="52" height="42" rx="20" fill="#e8a0a0"/>' +
+          '<circle cx="288" cy="148" r="23" fill="#e9b98f"/>' +
+          '<path d="M 265 144 A 23 23 0 0 1 311 144 Q 288 128 265 144 Z" fill="' + HAIR + '"/></g>' +
+          hArm(306, 180, 330, 154, "#e8a0a0", "#e9b98f") +
+          '<path d="M 277 150 Q 281 144 285 150 M 291 150 Q 295 144 299 150" fill="none" stroke="' + LN + '" stroke-width="2" stroke-linecap="round"/>' +
+          '<path d="M 282 158 Q 288 164 294 158" fill="none" stroke="' + LN + '" stroke-width="2" stroke-linecap="round"/>' +
+          '<circle cx="272" cy="157" r="3.4" fill="#f4a6a6" opacity="0.6"/><circle cx="304" cy="157" r="3.4" fill="#f4a6a6" opacity="0.6"/>' +
+          '<rect x="252" y="186" width="124" height="22" rx="11" fill="#d4a373" ' + LNS + '/>' +
+          '<path d="M 256 194 Q 256 186 266 186 L 366 186" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>' +
+          '<g ' + LNT + '><rect x="394" y="190" width="16" height="15" rx="3" fill="#6fb4e8"/>' +
+          '<path d="M 402 190 L 402 178" fill="none"/>' +
+          '<ellipse cx="395" cy="181" rx="6" ry="3" fill="#5cb85c" transform="rotate(-25 395 181)"/>' +
+          '<circle cx="402" cy="173" r="7" fill="#e8506c"/><circle cx="402" cy="173" r="2.4" fill="#f7d548" stroke="none"/></g>';
         return layers(base, before, after);
       }
 
@@ -754,27 +805,31 @@
         return layers(base, before, after);
       }
 
-      // ----- 6. koshou：こしょうした くるま（くるまは右 → こしょうした くるまは左） -----
-      function drawKoshou() {
-        // 小さな丸い くるま（実在の車種に似せない）。後ろの下のはしが (0, 0)、前は右。長さ 170
-        function smallCar(open) {
-          var s = '<g ' + LNS + '>' +
-            '<path d="M 2 -10 L 2 -30 Q 2 -36 10 -36 L 160 -36 Q 170 -36 170 -26 L 170 -10 Q 170 -6 164 -6 L 8 -6 Q 2 -6 2 -10 Z" fill="#d7e88f"/>' +
-            '<path d="M 38 -36 Q 44 -62 66 -62 L 108 -62 Q 122 -62 128 -36 Z" fill="#d7e88f"/>' +
-            '<path d="M 48 -38 Q 52 -56 68 -56 L 84 -56 L 84 -38 Z M 90 -56 L 106 -56 Q 116 -56 120 -38 L 90 -38 Z" fill="#bfe4f5" stroke-width="2"/>' +
-            '<rect x="1" y="-26" width="5" height="8" rx="2" fill="#e86a5a" stroke-width="1.5"/>';
-          if (open) {
-            // ボンネットが大きく あいている（けむり・火花・へこみはなし）
-            s += '<path d="M 130 -36 L 168 -36 L 168 -31 L 130 -31 Z" fill="#6e737a" stroke="none"/>' +
-                 '<path d="M 124 -34 L 150 -76 L 160 -70 L 134 -32 Z" fill="#c5d87a"/>';
-          } else {
-            s += '<path d="M 128 -36 L 128 -10" fill="none" stroke-width="1.8"/>';
-          }
-          s += '<circle cx="164" cy="-24" r="5" fill="#fff3c4" stroke-width="2"/>' +
-               '<circle cx="36" cy="-14" r="15" fill="#4a4a4a"/><circle cx="36" cy="-14" r="6" fill="#c8ccd0" stroke-width="2"/>' +
-               '<circle cx="134" cy="-14" r="15" fill="#4a4a4a"/><circle cx="134" cy="-14" r="6" fill="#c8ccd0" stroke-width="2"/></g>';
-          return s;
+      // ----- 6. koshou：こしょうした くるま（くるまは右 → こしょうした くるまは左）。助けたあと、いっしょに ひっぱって行く -----
+      // 小さな丸い くるま（実在の車種に似せない）。後ろの下のはしが (0, 0)、前は右。長さ 170
+      function koshouCar(open) {
+        var s = '<g ' + LNS + '>' +
+          '<path d="M 2 -10 L 2 -30 Q 2 -36 10 -36 L 160 -36 Q 170 -36 170 -26 L 170 -10 Q 170 -6 164 -6 L 8 -6 Q 2 -6 2 -10 Z" fill="#d7e88f"/>' +
+          '<path d="M 38 -36 Q 44 -62 66 -62 L 108 -62 Q 122 -62 128 -36 Z" fill="#d7e88f"/>' +
+          '<path d="M 48 -38 Q 52 -56 68 -56 L 84 -56 L 84 -38 Z M 90 -56 L 106 -56 Q 116 -56 120 -38 L 90 -38 Z" fill="#bfe4f5" stroke-width="2"/>' +
+          '<rect x="1" y="-26" width="5" height="8" rx="2" fill="#e86a5a" stroke-width="1.5"/>';
+        if (open) {
+          // ボンネットが大きく あいている（けむり・火花・へこみはなし）
+          s += '<path d="M 130 -36 L 168 -36 L 168 -31 L 130 -31 Z" fill="#6e737a" stroke="none"/>' +
+               '<path d="M 124 -34 L 150 -76 L 160 -70 L 134 -32 Z" fill="#c5d87a"/>';
+        } else {
+          s += '<path d="M 128 -36 L 128 -10" fill="none" stroke-width="1.8"/>';
         }
+        s += '<circle cx="164" cy="-24" r="5" fill="#fff3c4" stroke-width="2"/>' +
+             '<circle cx="36" cy="-14" r="15" fill="#4a4a4a"/><circle cx="36" cy="-14" r="6" fill="#c8ccd0" stroke-width="2"/>' +
+             '<circle cx="134" cy="-14" r="15" fill="#4a4a4a"/><circle cx="134" cy="-14" r="6" fill="#c8ccd0" stroke-width="2"/></g>';
+        return s;
+      }
+      // レッカーしゃに つながれた くるま（前が少し上がる。ボンネットは閉じる）。場面の座標で描く
+      function towedCar() {
+        return '<g transform="translate(136 248) rotate(-12 36 0)">' + koshouCar(false) + '</g>';
+      }
+      function drawKoshou() {
         var base = sky() + cloud(300, 46, 1.1) + cloud(150, 84, 0.8) + cloud(420, 90, 0.7) +
           '<rect x="0" y="194" width="480" height="34" fill="#8cc96b"/><rect x="0" y="194" width="480" height="3" fill="#a6d98a"/>' +
           '<rect x="0" y="226" width="480" height="34" fill="#c9ccd1"/><rect x="0" y="226" width="480" height="3" fill="#dfe1e5"/>';
@@ -784,28 +839,26 @@
           '<circle cx="0" cy="-8" r="15" fill="#8a8f96" stroke="' + LN + '" stroke-width="3"/>' +
           '<rect x="-5.5" y="-27" width="11" height="16" fill="#ffffff"/>' +
           '<path d="M -5.5 -25 L -5.5 -11 L 5.5 -11 L 5.5 -25" fill="none" stroke="' + LN + '" stroke-width="3"/></g>';
-        var before = '<g transform="translate(126 248)">' + smallCar(true) + '</g>' +
+        var before = '<g transform="translate(126 248)">' + koshouCar(true) + '</g>' +
           bubble(74, 104, 42, 34, 68, 170) + wrench +
           P(66, 246, 1, hBody({ shirt: "#f0807f" }) + hArm(-11, -38, -17, -18, "#f0807f") + hArm(11, -38, 16, -20, "#f0807f") + hFace("sad", 2));
-        // 前が少し上がって、フックに つながる（ボンネットは閉じる）
-        var after = '<g transform="translate(136 248) rotate(-12 36 0)">' + smallCar(false) + '</g>' +
-          P(66, 246, 1, hBody({ shirt: "#f0807f" }) + hArm(-11, -38, -17, -18, "#f0807f") + hArm(11, -40, 25, -60, "#f0807f") + hFace("happy", 2));
+        // 人は にっこりして手を上げる。こしょうした くるまは、レッカーしゃに つながれて いっしょに行く（ride が描く）
+        var after = P(66, 246, 1, hBody({ shirt: "#f0807f" }) + hArm(-11, -38, -17, -18, "#f0807f") + hArm(11, -40, 25, -60, "#f0807f") + hFace("happy", 2));
         return layers(base, before, after);
       }
 
-      // ----- 7. okyakusan：お客さん（くるまは左 → 人は右） -----
+      // ----- 7. okyakusan：お客さん（くるまは左 → 人は右）。助けたあと、お客さんは たくしーに のって行く -----
       function drawOkyakusan() {
         var base = sky() + cloud(110, 44, 1.1) + cloud(260, 30, 0.8) + cloud(60, 100, 0.6) + walk();
         var suitcase = '<g ' + LNS + '><path d="M 424 220 Q 424 211 430 211 Q 436 211 436 220" fill="none"/>' +
           '<rect x="414" y="220" width="28" height="22" rx="3" fill="#a9753b"/><path d="M 414 229 L 442 229" fill="none" stroke-width="1.8"/></g>';
         var before = suitcase + bubble(432, 130, 36, 29, 402, 166) + house(432, 148, 1.45) +
-          P(392, 242, 1, hBody({ shirt: "#f7d548", pants: "#4a90d9" }) + hArm(11, -38, 24, -22, "#f7d548") + hArm(-11, -40, -24, -64, "#f7d548") + hFace("sad", -2, -1.5));
-        var after = suitcase +
-          P(392, 242, 1, hBody({ shirt: "#f7d548", pants: "#4a90d9" }) + hArm(11, -38, 24, -22, "#f7d548") + hArm(-11, -40, -28, -60, "#f7d548") + hFace("happy", -1));
-        return layers(base, before, after);
+          P(392, 242, 1, hBody(OKYAKU_LOOK) + hArm(11, -38, 24, -22, "#f7d548") + hArm(-11, -40, -24, -64, "#f7d548") + hFace("sad", -2, -1.5));
+        // お客さんは、たくしーの まどの中へ（ride が描く）。ここには、だれもいない歩道が残る
+        return layers(base, before, "");
       }
 
-      // ----- 8. basutei：バスていの みんな（くるまは左 → バスていは右） -----
+      // ----- 8. basutei：バスていの みんな（くるまは左 → バスていは右）。助けたあと、みんなは バスに のって行く -----
       function drawBasutei() {
         var base = sky() + cloud(120, 44, 1.1) + cloud(330, 36, 0.8) + cloud(440, 90, 0.7) + walk() +
           // バスてい：まるい ひょうしき（絵・文字なし）とベンチ
@@ -814,27 +867,16 @@
           '<circle cx="250" cy="86" r="22" fill="#f2dc9b"/><circle cx="250" cy="86" r="14" fill="none" stroke="#d9c071" stroke-width="2"/>' +
           '<rect x="284" y="188" width="62" height="8" rx="2" fill="#a9753b"/><rect x="284" y="208" width="62" height="8" rx="2" fill="#a9753b"/>' +
           '<rect x="290" y="216" width="5" height="24" fill="#7a5530"/><rect x="335" y="216" width="5" height="24" fill="#7a5530"/></g>';
-        // おとな2人・こども2人
-        var ppl = [
-          { x: 306, s: 1.0,  o: { shirt: "#f0807f", pants: "#5b78b8", hair: "#4a3326" } },
-          { x: 346, s: 0.78, o: { shirt: "#f7d548", pants: "#7a8f5a", hair: "#6b4a2f", skin: "#e9b98f" } },
-          { x: 388, s: 1.0,  o: { shirt: "#4a90d9", pants: "#6b5a4a", hair: "#4a3326", skin: "#e9b98f" } },
-          { x: 432, s: 0.78, o: { shirt: "#5cb85c", pants: "#5b78b8", hair: "#6b4a2f" } }
-        ];
+        // おとな2人・こども2人。左（くるまが来る方）を見て、ならんで まっている
         var b = "";
-        var a = "";
-        var kidBase = "";
-        for (var i = 0; i < ppl.length; i++) {
-          var p = ppl[i];
+        for (var i = 0; i < BUS_PPL.length; i++) {
+          var p = BUS_PPL[i];
           var col = p.o.shirt;
           var skin = p.o.skin;
-          kidBase += P(p.x, 240, p.s, hBody(p.o));
-          // 左（くるまが来る方）を見て、ならんで まっている
-          b += P(p.x, 240, p.s, hArm(-11, -38, -16, -18, col, skin) + hArm(11, -38, 16, -18, col, skin) + hFace("calm", -2.5));
-          // 4人が にっこりして手を ふる
-          a += P(p.x, 240, p.s, hArm(-11, -40, -24, -64, col, skin) + hArm(11, -40, 24, -64, col, skin) + hFace("happy", -1));
+          b += P(p.x, 240, p.s, hBody(p.o) + hArm(-11, -38, -16, -18, col, skin) + hArm(11, -38, 16, -18, col, skin) + hFace("calm", -2.5));
         }
-        return layers(base + kidBase, b, a);
+        // みんなは、バスの まどの中へ（ride が描く）
+        return layers(base, b, "");
       }
 
       // ----- 9. dekoboko：でこぼこの道（くるまは左 → でこぼこは右） -----
@@ -896,24 +938,37 @@
 
       var SCENES = [
         { id: "neko",      answers: ["fire"],                  spot: "left",  draw: drawNeko,
+          hint: "ねこが きから おりられないみたい",
           exclude: ["crane", "tow", "shovel", "doubledecker", "police", "ambulance"] },
         { id: "obaachan",  answers: ["ambulance"],             spot: "left",  draw: drawObaachan,
+          hint: "おばあちゃんが ぐあいが わるいみたい",
           exclude: ["taxi", "bus", "doubledecker", "sports", "police", "fire"] },
         { id: "koinu",     answers: ["police"],                spot: "left",  draw: drawKoinu,
+          hint: "こいぬが まいごみたい",
           exclude: ["taxi", "bus", "doubledecker", "sports", "ambulance", "fire"] },
         { id: "nimotsu",   answers: ["crane"],                 spot: "left",  draw: drawNimotsu,
+          hint: "おおきな にもつを のせたいみたい",
           exclude: ["fire", "tow", "shovel"] },
         { id: "gomi",      answers: ["garbage"],               spot: "right", draw: drawGomi,
+          hint: "ごみが いっぱいで こまっているみたい",
           exclude: ["dump", "bulldozer", "shovel"] },
         { id: "koshou",    answers: ["tow"],                   spot: "right", draw: drawKoshou,
+          hint: "くるまが こわれて うごけないみたい",
+          ride: { kind: "tow", draw: towedCar },
           exclude: ["crane", "dump", "police", "taxi"] },
-        { id: "okyakusan", answers: ["taxi"],                  spot: "left",  draw: drawOkyakusan,
+        { id: "okyakusan", answers: ["taxi"],                  spot: "left",  draw: drawOkyakusan, cx: 290,
+          hint: "おきゃくさんが おうちへ いきたいみたい",
+          ride: { kind: "window", people: [{ s: 1.0, o: OKYAKU_LOOK }] },
           exclude: ["bus", "doubledecker", "police", "ambulance", "sports"] },
-        { id: "basutei",   answers: ["bus", "doubledecker"],   spot: "left",  draw: drawBasutei,
+        { id: "basutei",   answers: ["bus", "doubledecker"],   spot: "left",  draw: drawBasutei, cx: 185,
+          hint: "みんなが のりものを まっているみたい",
+          ride: { kind: "window", people: BUS_PPL },
           exclude: ["taxi", "police", "ambulance", "sports"] },
         { id: "dekoboko",  answers: ["grader", "roller"],      spot: "left",  draw: drawDekoboko,
+          hint: "さんりんしゃが はしりにくいみたい",
           exclude: ["bulldozer", "shovel", "tractor"] },
         { id: "tsuchi",    answers: ["bulldozer", "shovel"],   spot: "left",  draw: drawTsuchi,
+          hint: "つちの やまで みちが とおれないみたい",
           exclude: ["dump", "grader", "tractor", "garbage", "roller"] }
       ];
       var SCENE_IDS = [];
@@ -1016,6 +1071,7 @@
       var wrongCount = 0;          // いまの問題で まちがえた回数（画面には出さない）
       var autoNudged = false;      // 「えらんでね」（自動）を もう出したか
       var nudgeTimer = null;
+      var hintTextTimer = null;    // ヒントの文字を出す予約
       var sceneOutTimer = null;    // 前の場面を ふわっと消し始める予約
       var hint = null;             // 指マーク（1問目だけ）
       var quiz = createQuiz(Math.random);
@@ -1033,9 +1089,23 @@
       var msgTimer = null;
       var msgFadeTimer = null;
 
+      // ヒントの文字は、1行に入る大きさに小さくする（ふだんの文字は、CSS の大きさのまま）
+      function fitMessage(kind) {
+        message.style.fontSize = "";
+        if (kind !== "hint") return;
+        var cs = window.getComputedStyle(message);
+        var avail = message.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 8;
+        var range = document.createRange();
+        range.selectNodeContents(message);
+        var w = range.getBoundingClientRect().width;
+        if (avail > 0 && w > avail) {
+          message.style.fontSize = Math.max(MIN_HINT_FONT, Math.floor(parseFloat(cs.fontSize) * avail / w * 10) / 10) + "px";
+        }
+      }
       function swapMessage(text, kind) {
         message.textContent = text;
         message.setAttribute("data-showing", kind);
+        fitMessage(kind);
         if (reduced()) {
           message.style.transition = "none";
           message.style.opacity = "1";
@@ -1044,17 +1114,18 @@
           message.style.opacity = "1";
         }
       }
-      function showNameMessage(name) {
+      // 文字を入れかえる（kind：name ＝ くるまの名前、hint ＝ ヒントの文字）
+      function showMessage(text, kind) {
         clearTimeout(msgTimer);
         clearTimeout(msgFadeTimer);
         if (reduced()) {
-          swapMessage(name, "name");
+          swapMessage(text, kind);
           return;
         }
         message.style.transition = "opacity " + MSG_FADE + "ms ease";
         message.style.opacity = "0";
         msgTimer = setTimeout(function () {
-          swapMessage(name, "name");
+          swapMessage(text, kind);
         }, MSG_FADE);
       }
       // 走りさりの終わりの 0.25秒前から、名前を消し始める（次の問題を作るとき、消え終わっているように）
@@ -1114,11 +1185,15 @@
       function stopX(i) {
         return SIDE + L.slotW * i;
       }
+      // いまの場面で、くるまのまん中が止まる場所（場面の座標の x）
+      function sceneSpotCx() {
+        var sc = sceneObj ? SCENE_BY_ID[sceneObj.id] : null;
+        if (sc && sc.cx) return sc.cx;
+        return sc && sc.spot === "right" ? SPOT_RIGHT : SPOT_LEFT;
+      }
       // 場面の中で、正解のくるまが止まる場所（横の箱の左のはし）
       function spotX() {
-        var cx = SPOT_LEFT;
-        if (sceneObj && SCENE_BY_ID[sceneObj.id].spot === "right") cx = SPOT_RIGHT;
-        return L.sceneLeft + cx * L.ss - L.slotW / 2;
+        return L.sceneLeft + sceneSpotCx() * L.ss - L.slotW / 2;
       }
 
       // 背景（道）と、場面の箱・右へのびる細い道に、並べ方を書く
@@ -1267,6 +1342,7 @@
       // ===== ask のあいだの並べ直し（画面の大きさ・回転が変わったとき） =====
       function refit() {
         if (!sceneObj || choices.length === 0) return;
+        fitMessage(message.getAttribute("data-showing"));   // ヒントの文字は、新しい画面の幅に合わせて小さくし直す
         L = computeLayout();
         applyBackground();
         applyScene();
@@ -1306,6 +1382,18 @@
         hint.style.setProperty("--hs", fit.scale);
         hint.style.left = (inBoxX - K.touch.HINT_TIP_X * fit.scale) + "px";
         hint.style.bottom = (fromBottom - fit.drop) + "px";
+      }
+
+      // =====================================================
+      // ヒントの文字（問題が出て 10秒たったら、場面に合う やさしい一言を、上の文字の場所に出す。1問に1回）
+      //   正解したら、くるまの名前に かわる。急がせる言い方・数字・音は使わない
+      // =====================================================
+      function restartHintTextTimer() {
+        clearTimeout(hintTextTimer);
+        hintTextTimer = setTimeout(function () {
+          if (scene !== "ask" || !sceneObj) return;
+          showMessage(SCENE_BY_ID[sceneObj.id].hint, "hint");
+        }, HINT_TEXT_DELAY);
       }
 
       // =====================================================
@@ -1382,6 +1470,54 @@
       }
 
       // =====================================================
+      // くるまに のっていく人・ひっぱって行く くるま（助けたあと、場面の絵の代わりに、くるまと いっしょに動く）
+      //   window：くるまの まどの中に、人の上半身を重ねる（くるまの絵の座標）
+      //   tow   ：こしょうした くるまを、レッカーしゃの うしろに つなぐ（場面の座標。場面の中の くるまと同じ形・同じ場所）
+      // =====================================================
+      var rideCount = 0;
+      function attachRide(ch) {
+        var sc = sceneObj ? SCENE_BY_ID[sceneObj.id] : null;
+        if (!sc || !sc.ride || !L) return;
+        var el = document.createElement("div");
+        el.className = "ride";
+        rideCount++;
+        if (sc.ride.kind === "tow") {
+          // 場面の絵と同じ大きさ・同じ位置で、くるまの縦の箱の中に置く（レッカーしゃと いっしょに動く）
+          var sw = SCENE_W * L.ss;
+          var sh = SCENE_H * L.ss;
+          el.style.left = (L.slotW / 2 - sceneSpotCx() * L.ss) + "px";
+          el.style.bottom = (BOTTOM - (SCENE_H - SCENE_GROUND) * L.ss + TIRE_GAP * L.ins) + "px";
+          el.style.width = sw + "px";
+          el.style.height = sh + "px";
+          el.innerHTML = '<svg viewBox="0 0 ' + SCENE_W + ' ' + SCENE_H + '" width="' + sw + '" height="' + sh + '" aria-hidden="true" focusable="false">' + sc.ride.draw() + '</svg>';
+          ch.v.insertBefore(el, ch.frame);
+        } else {
+          var wins = RIDE_WINDOWS[ch.id];
+          if (!wins) return;
+          var inner = "";
+          for (var i = 0; i < sc.ride.people.length && i < wins.length; i++) {
+            inner += riderSvg(wins[i], sc.ride.people[i], "ride" + rideCount + "-" + i);
+          }
+          var cw = ch.car.width;
+          var chh = ch.car.height;
+          el.style.left = ((FRAME_W - cw) / 2) + "px";
+          el.style.bottom = "0";
+          el.style.width = cw + "px";
+          el.style.height = chh + "px";
+          el.innerHTML = '<svg viewBox="0 0 ' + cw + ' ' + chh + '" width="' + cw + '" height="' + chh + '" aria-hidden="true" focusable="false">' + inner + '</svg>';
+          ch.tilt.appendChild(el);
+        }
+        void el.offsetWidth;
+        el.classList.add("shown");
+      }
+      // 走りさるとき、ひっぱる くるまの ぶん（うしろの はしが、画面の外に出るまで）だけ、よけいに走る
+      function towTrail() {
+        var sc = sceneObj ? SCENE_BY_ID[sceneObj.id] : null;
+        if (!sc || !sc.ride || sc.ride.kind !== "tow") return 0;
+        return Math.max(0, (sceneSpotCx() - 134) * L.ss - FRAME_W / 2 * L.ins) + 6;
+      }
+
+      // =====================================================
       // 正しいくるまを さわったとき：走っていく → 仕事 → 場面が にっこり → 走りさる → 次の問題
       //   正解を さわった時刻を 0 として：
       //   0秒 ピポピン♪・上の文字が名前に ／ 0〜0.9秒 場面へ走っていく ／ 0.9秒 仕事
@@ -1391,12 +1527,13 @@
         winner = ch;
         setScene("correct");
         clearTimeout(nudgeTimer);
+        clearTimeout(hintTextTimer);
         hintTimer.stop();
         C.clearGlow(ch.frame);            // 「そっと教える光」が、場面の中までついてこないように消す
 
         K.sound.playCorrect();            // 「ピポピン♪」（紙ふぶきは、にっこりのときに別に出す）
         ch.el.classList.add("drive");     // 場面より手前に出す
-        showNameMessage(K.cars.get(ch.id).name);   // 上の文字を、くるまの名前に（図鑑の名前）
+        showMessage(K.cars.get(ch.id).name, "name");   // 上の文字を、くるまの名前に（図鑑の名前）
 
         // 地面の影は、走り始めに見えなくして、戻さない（場面の地面に別の影は描かない）
         var sh = ch.car.el.querySelector('[data-part="shadow"]');
@@ -1444,6 +1581,9 @@
             sceneObj.svg.classList.add("helped");
             sceneObj.el.setAttribute("data-help", "after");
           }
+          // 動きを減らす設定では、たくしーのドアが閉じるのを待ってから、人を出す
+          if (reduced()) setTimeout(function () { attachRide(ch); }, 450);
+          else attachRide(ch);
           K.stage.confetti();
         }, DRIVE_IN + HELP_DELAY);
 
@@ -1469,7 +1609,7 @@
           // 1歩の長さ：画面の横幅 ÷ 6（最低 40px）。走る時間は、距離に合わせる（最長 1.5秒）
           var step = Math.max(MIN_STEP, window.innerWidth / STEP_DIV);
           // 場面の中の大きさ（ins）のくるまの絵の左のはしも、画面の外に出るところまで
-          var leaveX = K.stage.exitX() + Math.max(0, (FRAME_W * L.ins - L.slotW) / 2);
+          var leaveX = K.stage.exitX() + Math.max(0, (FRAME_W * L.ins - L.slotW) / 2) + towTrail();
           time = Math.min(LEAVE_HOLD, Math.max(MIN_LEAVE_TIME, K.stage.timeFor(Math.max(1, leaveX - winner.mover.x), step)));
           winner.mover.moveTo(leaveX, time);     // 縦の箱・大きさの箱は そのまま（宙を走らず、場面の地面の高さ）
           hold = LEAVE_HOLD;
@@ -1539,6 +1679,7 @@
         setScene("ask");
         refit();
         restartNudgeTimer();
+        restartHintTextTimer();
       }
 
       // =====================================================
@@ -1571,6 +1712,7 @@
       buildStage(quiz.next());
       for (var n = 0; n < 3; n++) choices[n].mover.moveTo(stopX(n), 0);
       setScene("ask");
+      restartHintTextTimer();
 
       // 指マーク：1問目の正解のくるまの屋根の上。ページを開いたときは出ている
       hint = K.touch.createHint();
