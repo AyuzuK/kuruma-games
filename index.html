@@ -114,11 +114,11 @@
       overflow: visible;             /* アームの先は絵の枠より少し上に出るので、切らずに見せる */
     }
 
-    /* ===== ボタンを4つ並べる =====
-       並べ方は3つ（縦1列 col／横1列 row／2×2 grid）。どれにするかは、下の JavaScript が
+    /* ===== ボタンを5つ並べる =====
+       並べ方は4つ（縦1列 col／横1列 row／2列 grid／3列 grid3）。どれにするかは、下の JavaScript が
        画面の大きさから「いちばん大きく見える並べ方」を選んで、この箱の data-layout に書く
        （ボタンのあいだは どれも 24px）。
-       4つ並べて入らないときは、4つとも同じ率（--k、0.35〜1）で縮める。率も JavaScript が入れる。
+       5つ並べて入らないときは、5つとも同じ率（--k、0.3〜1）で縮める。率も JavaScript が入れる。
        ボタンそのものの大きさ・ゆれ・沈み方は変えずに、外がわの箱（.slot-inner）を縮める */
     .games {
       display: flex;
@@ -135,9 +135,15 @@
       display: flex;
       flex-direction: row;
     }
-    .games[data-layout="grid"] {
-      display: grid;
-      grid-template-columns: repeat(2, auto);
+    /* 2列・3列：折り返して並べ、最後の段（あまった1〜2つ）は まん中に寄せる。
+       箱の横はばは、JavaScript が「列の数 × ボタンの場所 ＋ あいだ」に書く（列の数で折り返すため） */
+    .games[data-layout="grid"],
+    .games[data-layout="grid3"] {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
       gap: 24px;
     }
     /* 1つぶんの場所。ボタン（ふちをふくめて 312 × 252）＋下の影 10px＋ゆれて上がる 4px ＋ゆとり 2px */
@@ -259,6 +265,27 @@
     /* 場面の絵（高い木の ねこを、しょうぼうしゃが助けるところ。ゲームの場面を単純にして写したもの）。
        座標の枠は 横300 × 縦240（ボタンの中と同じ大きさ）。id は使わない */
     .shutsudou-svg {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 300px;
+      height: 240px;
+      display: block;
+    }
+
+    /* ===== 5本目「たりない ぶひんは どれ？」のボタン =====
+       作りは1〜4本目のボタンと同じ。ふちと下の影の色だけ、みどり色にして見分けやすくする */
+    .game-button.buhin-button {
+      border-color: #3fa66a;
+      box-shadow: 0 10px 0 #2a7a4c;
+      animation-delay: -1.1s;        /* 1〜4本目のボタンと、ゆれる向きを少しずらす */
+    }
+    .game-button.buhin-button.pressed {
+      box-shadow: 0 2px 0 #2a7a4c;
+    }
+    /* 荷台が足りない ダンプカーと、とんでくる荷台（ゲームの図鑑の絵を写して、単純にしたもの）。
+       座標の枠は 横300 × 縦240（ボタンの中と同じ大きさ）。id は使わない */
+    .buhin-svg {
       position: absolute;
       left: 0;
       top: 0;
@@ -700,6 +727,66 @@
     </svg>
   </a>
   </div></div>
+
+  <div class="slot"><div class="slot-inner">
+  <!-- 「たりない ぶひんは どれ？」へのボタン。
+       ファイルをダブルクリックで開いたときも動くように、index.html まで書く -->
+  <a class="game-button buhin-button" id="top5-buhinGame" href="games/05-buhin/index.html" aria-label="たりない ぶひんは どれ">
+    <div class="road"></div>
+    <!-- 荷台が足りない ダンプカー（荷台の場所は「？」の点線のわく）と、上から とんでくる荷台
+         （ゲームの図鑑の絵を単純にして写したもの。この画面では動かさない。文字は入れない）。
+         奥から順に：ダンプカー → 点線のわく → 荷台の影 → とんでくる荷台 -->
+    <svg class="buhin-svg" viewBox="0 0 300 240" aria-hidden="true" focusable="false">
+      <!-- ダンプカー（横 290 × 縦 220 の絵を 0.74倍。タイヤの下が、道の中ほどにのる） -->
+      <g transform="translate(40 37) scale(0.74)" stroke="#5a3d1e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+        <ellipse cx="146" cy="214" rx="128" ry="5" fill="#5a3d1e" opacity="0.25" stroke="none"/>
+        <!-- 灰色の台と、前のバンパー -->
+        <rect x="25" y="167" width="252" height="23" rx="7" fill="#8a8f96" stroke="none"/>
+        <path d="M 32 184 L 270 184" fill="none" stroke="#6e737a" stroke-width="5"/>
+        <rect x="25" y="167" width="252" height="23" rx="7" fill="none"/>
+        <rect x="273" y="173" width="13" height="12" rx="4" fill="#c8ccd0"/>
+        <!-- 青い運転席（窓1枚） -->
+        <path d="M 200 195 L 200 107 Q 200 95 212 95 L 254 95 Q 264 95 267 105 L 278 135 Q 280 141 280 149 L 280 187 Q 280 195 272 195 Z" fill="#4a90d9" stroke="none"/>
+        <path d="M 207 113 Q 207 102 216 102 L 252 102" fill="none" stroke="#76b0ea" stroke-width="5"/>
+        <path d="M 207 188 L 272 188" fill="none" stroke="#2f6fb4" stroke-width="7"/>
+        <path d="M 200 195 L 200 107 Q 200 95 212 95 L 254 95 Q 264 95 267 105 L 278 135 Q 280 141 280 149 L 280 187 Q 280 195 272 195 Z" fill="none"/>
+        <path d="M 210 113 Q 210 107 216 107 L 253 107 Q 259 107 261 113 L 269 136 Q 270 141 265 141 L 214 141 Q 210 141 210 137 Z" fill="#bfe4f5" stroke-width="2.5"/>
+        <g fill="none" stroke="#ffffff" stroke-width="4" opacity="0.7">
+          <path d="M 220 135 L 232 113"/>
+          <path d="M 231 135 L 243 113"/>
+        </g>
+        <rect x="212" y="151" width="13" height="4" rx="2" fill="#5a3d1e" stroke="none"/>
+        <path d="M 270 149 L 270 183" fill="none" stroke-width="1.5"/>
+        <!-- 前のライトと、うしろの小さな赤いランプ -->
+        <circle cx="275" cy="161" r="5.5" fill="#fff3c4" stroke-width="2"/>
+        <rect x="20" y="170" width="6" height="10" rx="2" fill="#e86a5a" stroke-width="2"/>
+        <!-- タイヤ3つ -->
+        <g transform="translate(60 193)"><circle r="22" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/><circle r="3.5" fill="#8a8a8a" stroke="none"/></g>
+        <g transform="translate(140 193)"><circle r="22" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/><circle r="3.5" fill="#8a8a8a" stroke="none"/></g>
+        <g transform="translate(235 193)"><circle r="22" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/><circle r="3.5" fill="#8a8a8a" stroke="none"/></g>
+        <!-- 荷台の場所の、点線のわくと「？」（文字ではなく、線の形） -->
+        <rect x="30" y="104" width="166" height="62" rx="18" fill="#ffffff" fill-opacity="0.8" stroke="#6b4a2f" stroke-width="4" stroke-dasharray="8 6"/>
+        <g transform="translate(113 136) scale(0.465)">
+          <path d="M -18 -22 C -18 -42 18 -42 18 -22 C 18 -8 0 -6 0 8" fill="none" stroke="#a89a90" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="0" cy="32" r="6.5" fill="#a89a90" stroke="none"/>
+        </g>
+      </g>
+      <!-- 荷台のうすい影（わくの上） -->
+      <ellipse cx="136" cy="126" rx="50" ry="6" fill="#5a3d1e" opacity="0.15"/>
+      <!-- 上から とんでくる荷台（オレンジ。少し斜め） -->
+      <g transform="translate(136 62) rotate(-11)">
+        <g transform="scale(0.74) translate(-76.5 32.5)" stroke="#5a3d1e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+          <path d="M -5 -59 Q -5 -65 1 -65 L 152 -65 Q 158 -65 158 -59 L 158 -6 Q 158 0 152 0 L 1 0 Q -5 0 -5 -6 Z" fill="#f39a3d" stroke="none"/>
+          <rect x="-1" y="-61" width="155" height="7" rx="3" fill="#ffb865" stroke="none"/>
+          <rect x="-1" y="-10" width="155" height="6" rx="3" fill="#d97a22" stroke="none"/>
+          <path d="M -5 -52 L 158 -52" fill="none" stroke-width="2"/>
+          <path d="M 36 -52 L 36 -4 M 77 -52 L 77 -4 M 118 -52 L 118 -4" fill="none" stroke-width="2.5"/>
+          <path d="M -5 -59 Q -5 -65 1 -65 L 152 -65 Q 158 -65 158 -59 L 158 -6 Q 158 0 152 0 L 1 0 Q -5 0 -5 -6 Z" fill="none"/>
+        </g>
+      </g>
+    </svg>
+  </a>
+  </div></div>
   </div>
 
   <script>
@@ -715,10 +802,11 @@
       });
     });
 
-    // ボタンが4つ並んで画面に入るように、並べ方と、縮める率（0.35〜1）を、いっしょに決める。
-    //   並べ方の候補は3つ：縦1列（col）・横1列（row）・2×2（grid）。それぞれの率を計算して、
-    //   いちばん大きい率の並べ方を選ぶ（同じ率なら grid → col → row の順）。選んだ並べ方は、
-    //   ボタンを並べる箱の data-layout に書き、見た目の切りかえは CSS が行う。
+    // ボタンが5つ並んで画面に入るように、並べ方と、縮める率（0.3〜1）を、いっしょに決める。
+    //   並べ方の候補は4つ：縦1列（col）・横1列（row）・2列×3段（grid）・3列×2段（grid3）。
+    //   それぞれの率を計算して、いちばん大きい率の並べ方を選ぶ（同じ率なら grid → grid3 → col → row の順）。
+    //   選んだ並べ方は、ボタンを並べる箱の data-layout に書き、見た目の切りかえは CSS が行う。
+    //   2列・3列のときは、箱の横はばを「列の数ぶん」に決めて折り返し、最後の段は まん中に寄せる。
     //   ボタンの場所は 312 × 268、あいだは 24px、画面のはしからは 16px、題名とボタンのあいだは 24px あける。
     // 画面の大きさが変わったときだけ計算する（すぐ1回と、0.3秒あとにもう1回）
     var games = document.getElementById("games");
@@ -729,16 +817,24 @@
       var h = window.innerHeight;
       var room = h - 32 - title.offsetHeight - 24;      // 題名の下で、ボタンに使える高さ
       var options = [
-        { layout: "grid", k: Math.min(1, (w - 32 - 24) / (312 * 2), (room - 24) / (268 * 2)) },
-        { layout: "col",  k: Math.min(1, (w - 32) / 312, (room - 24 * 3) / (268 * 4)) },
-        { layout: "row",  k: Math.min(1, (w - 32 - 24 * 3) / (312 * 4), room / 268) }
+        { layout: "grid",  cols: 2, k: Math.min(1, (w - 32 - 24) / (312 * 2), (room - 24 * 2) / (268 * 3)) },
+        { layout: "grid3", cols: 3, k: Math.min(1, (w - 32 - 24 * 2) / (312 * 3), (room - 24) / (268 * 2)) },
+        { layout: "col",   cols: 1, k: Math.min(1, (w - 32) / 312, (room - 24 * 4) / (268 * 5)) },
+        { layout: "row",   cols: 5, k: Math.min(1, (w - 32 - 24 * 4) / (312 * 5), room / 268) }
       ];
       var best = options[0];
       for (var i = 1; i < options.length; i++) {
         if (options[i].k > best.k) best = options[i];
       }
+      var k = Math.max(0.3, best.k);
       games.setAttribute("data-layout", best.layout);
-      games.style.setProperty("--k", Math.max(0.35, best.k));
+      games.style.setProperty("--k", k);
+      // 2列・3列：列の数 × ボタンの場所 ＋ あいだ（わずかな誤差で折り返しが変わらないよう 1px ゆとりを足す）
+      if (best.layout === "grid" || best.layout === "grid3") {
+        games.style.width = (best.cols * 312 * k + (best.cols - 1) * 24 + 1) + "px";
+      } else {
+        games.style.width = "";
+      }
     }
     function onResize() {
       fitButtons();
