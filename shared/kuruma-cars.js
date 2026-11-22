@@ -173,7 +173,7 @@
   var RED    = { main: "#e5483c", light: "#f2705f", shade: "#c4352b" };
   var YELLOW = { main: "#f7c33c", light: "#ffd96b", shade: "#e0a52a" };
   var PURPLE = { main: "#9b86d6", light: "#b9a9e6", shade: "#7a66b8" };   // タクシー
-  var PINK   = { main: "#ef8fb0", light: "#f7b5cb", shade: "#d46f93" };   // レッカーしゃ
+  var TOWWHITE = { main: "#f6f8fb", light: "#ffffff", shade: "#c5d0dc" };   // レッカーしゃの運転席（白）
   var SKY    = { main: "#5ec4d6", light: "#8fd8e6", shade: "#3ba3b8" };   // タンクローリーの運転席
   var FIELD_GREEN = { main: "#3fa45b", light: "#6cc47f", shade: "#2e8446" }; // トラクター
 
@@ -1514,7 +1514,7 @@
 
   // =====================================================
   // 14. レッカーしゃ（tow、横 300）
-  //    右にピンクの運転席、うしろに低い荷台と道具箱。荷台の上から、うしろ（左）へななめに上がる、太くて短い うで。
+  //    右に白の運転席、うしろに青の低い荷台と道具箱（白いライン）。荷台の上から、うしろ（左）へななめに上がる、太くて短い うで。
   //    うでの先の滑車から ロープと まるいフックがたれる（引っぱられる車は描かない）
   //    仕事：うでが付け根 (120, 120) を中心に、先が上がる向きに 8度 上がり、同時にロープがちぢんで
   //          フックが 12px 上がる（まき取る）。そのあと戻る。フックは、うでの先についていき、まっすぐ下を向いたまま
@@ -1529,18 +1529,18 @@
   add({
     id: "tow",
     name: "れっかーしゃ",
-    color: "pink",
+    color: "blue",
     width: 300,
     tip: { x: 160, y: 106 },   // 道具箱の上（横幅の 53%。うでより右）
     workTime: 700,
     draw: function () {
-      var p = PINK;
+      var p = BLUE;
       return shadow(150, 135) +
         chassis(75, 287) +
         part("box",
           '<path d="' + TOW_BOX + '" fill="' + p.main + '" stroke="none"/>' +
-          '<rect x="80" y="145" width="55" height="4" rx="2" fill="' + p.light + '" stroke="none"/>' +
-          '<rect x="146" y="114" width="52" height="4" rx="2" fill="' + p.light + '" stroke="none"/>' +
+          '<rect x="80" y="145" width="55" height="4" rx="2" fill="#ffffff" stroke="none"/>' +
+          '<rect x="146" y="114" width="52" height="4" rx="2" fill="#ffffff" stroke="none"/>' +
           '<rect x="80" y="161" width="118" height="4" rx="2" fill="' + p.shade + '" stroke="none"/>' +
           '<path d="' + TOW_BOX + '" fill="none"/>' +
           '<path d="M 172 120 L 172 158" fill="none" stroke-width="2"/>' +
@@ -1572,7 +1572,7 @@
               '</g>' +
             '</g></g></g>' +
           '</g></g></g>') +
-        cab(209, 290, 95, 195, PINK) +
+        cab(209, 290, 95, 195, TOWWHITE) +
         lights(285, 161, 78, 170) +
         tire(105) + tire(165) + tire(250);
     },
@@ -1639,6 +1639,14 @@
           RAINBOW[i % 6] + '"/>';
       }
       return shadow(142, 128) +
+        // リアウイング（うしろの羽根）：車体のうしろ（左）の上。支柱2本は車体のうしろにかくれ、かげにしたときも車体とつながる
+        part("wing",
+          '<rect x="26" y="146" width="6" height="21" rx="2" fill="#4a4f5a"/>' +
+          '<rect x="44" y="146" width="6" height="19" rx="2" fill="#4a4f5a"/>' +
+          '<rect x="13" y="136" width="49" height="11" rx="5" fill="#3d4452"/>' +
+          '<rect x="18" y="139" width="39" height="2.5" rx="1.2" fill="#7a8499" stroke="none"/>' +
+          '<rect x="12" y="131" width="6" height="19" rx="2.5" fill="#3d4452"/>' +
+          '<rect x="57" y="131" width="6" height="19" rx="2.5" fill="#3d4452"/>') +
         part("body",
           '<clipPath id="' + clip + '"><path d="' + SPORTS_BODY + '"/></clipPath>' +
           '<g clip-path="url(#' + clip + ')" stroke="none">' +
