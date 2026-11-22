@@ -276,10 +276,21 @@
       transform-origin: 0 0;         /* 左上を中心に大きさを変える */
     }
 
+    /* まちがえたときの ❌ のバッジ（わくの上。大きさと場所は JavaScript が書く。赤は使わない）。
+       上のくるま・とぶ箱より手前、紙ふぶき・大人用ボタンより奥 */
+    /* 点線のわくの「？」：❌ が出ているあいだだけ、ふわっと消える（点滅しない） */
+    .hole-q { transition: opacity 0.2s ease; }
+    .wrong-mark {
+      position: fixed;
+      z-index: 2;
+      pointer-events: none;
+    }
+
     /* 動きを減らす設定では、雲の流れも止める */
     @media (prefers-reduced-motion: reduce) {
       .clouds { animation: none; }
-      .part-dai { transition: none; }   /* 光は、光った形をすぐに出す */
+      .part-dai { transition: none; }
+      .hole-q { transition: none; }   /* 光は、光った形をすぐに出す */
     }
   </style>
 </head>
@@ -473,6 +484,10 @@
 
       // 動きの時間（ミリ秒）
       var PART_FLY = 700;        // 部品が とんでいく時間
+      var WRONG_FLY = 500;       // まちがえた部品が、わくの手前までとぶ時間（戻る時間も同じ）
+      var WRONG_BACK_AT = 900;   // まちがえてから、部品が戻り始めるまで
+      var WRONG_TOTAL = 1600;    // まちがいの動きが終わるまで
+      var WRONG_REDUCED = 800;   // 動きを減らす設定：❌ を出している時間
       var HOLE_FADE = 200;       // 点線のわくが ふわっと消える時間（とんでいく終わりの 0.2秒）
       var WORK_DELAY = 300;      // くっついてから、仕事を始めるまで
       var WORK_HOLD = 1500;      // 仕事を始めてから、走りさるまで（どのくるまも同じ）
@@ -585,8 +600,8 @@
         // 「？」の絵は、高さ約 80（線のはばをふくむ）の大きさで描いて、わくに合わせて縮める
         var sc = short * 0.6 / 80;
         return '<g class="hole-mark">' +
-          shape + ' fill="#ffffff" fill-opacity="0.8" stroke="' + HOLE_LINE + '" stroke-width="4" stroke-dasharray="8 6"/>' +
-          '<g transform="translate(' + cx + ' ' + (cy + 1) + ') scale(' + sc.toFixed(3) + ')">' +
+          shape + ' fill="#ffffff" fill-opacity="1" stroke="' + HOLE_LINE + '" stroke-width="4" stroke-dasharray="8 6"/>' +
+          '<g class="hole-q" transform="translate(' + cx + ' ' + (cy + 1) + ') scale(' + sc.toFixed(3) + ')">' +
             '<path d="M -18 -22 C -18 -42 18 -42 18 -22 C 18 -8 0 -6 0 8" fill="none" stroke="' + HOLE_MARK + '" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>' +
             '<circle cx="0" cy="32" r="6.5" fill="' + HOLE_MARK + '"/>' +
           '</g></g>';
@@ -710,17 +725,19 @@
         }
       }
       // 正解のくるまの名前に入れかえる（まず消えて、入れかえてから出る）
-      function showNameMessage(name) {
+      //   kind は省略すると "name"（まちがえたときの「ちがうよ」と、もとの文字に戻すときは "wrong"・"title"）
+      function showNameMessage(name, kind) {
+        kind = kind || "name";
         clearTimeout(msgTimer);
         clearTimeout(msgFadeTimer);
         if (reduced()) {
-          swapMessage(name, "name");
+          swapMessage(name, kind);
           return;
         }
         message.style.transition = "opacity " + MSG_FADE + "ms ease";
         message.style.opacity = "0";
         msgTimer = setTimeout(function () {
-          swapMessage(name, "name");
+          swapMessage(name, kind);
         }, MSG_FADE);
       }
       // 走りさりの終わりの 0.25秒前から、名前を消し始める（次の問題を作るとき、消え終わっているように）
@@ -996,6 +1013,7 @@
 
       // ===== ask のあいだの並べ直し（画面の大きさ・回転が変わったとき） =====
       function refit() {
+        if (wrongRun) finishWrong(wrongRun);     // まちがいの動きの途中なら、きれいに片づけてから並べ直す
         if (!target || choices.length === 0) return;
         L = computeLayout();
         applyBackground();
@@ -1084,21 +1102,14 @@
         C.stopNudge(hopEls());            // 残っている えらんでね の印を外す
 
         if (ch.correct) {
+          cancelWrong();                  // まちがいの動きの途中でも、すぐ受け付けて、きれいに片づける
           onCorrect(ch);
           return;
         }
 
-        // ちがうカード：首をかしげて「ぽよん」。2回まちがえたら、正解のカードのうしろが ふわっと光る
-        var counted = C.wrong(ch.tilt);
-        if (counted) {
-          wrongCount++;
-          if (wrongCount >= C.HINT_AFTER) {
-            var right = correctChoice();
-            C.glow(right.glowBox, GLOW_WIDTH);
-            right.el.classList.add("hint-on");       // 台のふちと まわりも、やわらかく光らせる（大きな部品でも見えるように）
-            body.setAttribute("data-hint", "glow");
-          }
-        }
+        // ちがうカード：部品が、わくの手前までとんで、やさしい ❌ が出て、元のカードへ戻る。
+        // 動いている最中は、新しい動きを重ねない（同じカードも、ほかのまちがいのカードも、終わるまで待つ）
+        if (!wrongRun) startWrong(ch);
         afterTouch();
       });
 
@@ -1192,6 +1203,192 @@
             svg.style.transition = "opacity " + REDUCED_FADE + "ms ease";
             svg.style.opacity = "1";
           }, REDUCED_FADE);
+        }
+      }
+
+      // =====================================================
+      // まちがえた部品を さわったとき（正解ではないカード）：くっつこうとして、やさしい ❌ を出して、戻る
+      //   0〜0.5秒 部品が、わくの手前までとんでいく（わくの中には入らない・くっつかない。わくは消さない）
+      //   0.5秒    わくの上に ❌ のバッジが ふわっと出る（0.2秒）→ 見せる（0.5秒）→ ふわっと消える（0.3秒）。
+      //            同時に、上の文字が「ちがうよ」に変わる。赤は使わない。点滅しない（明るさは 0 → 1 → 0 だけ）
+      //   0.9秒    部品が、元のカードへ戻る（0.5秒）。ここで「ぽよん」を1回
+      //   1.6秒    おわり：上の文字をもとに戻し、とぶ箱を外す。何回でも選べる（まちがいの数は画面に出さない）
+      //   動きを減らす設定：とばない。❌ が 0.8秒だけ（transition なしで）出て消える。文字も同じ時間。「ぽよん」は その場で1回
+      //   責める文字・音は使わない
+      // =====================================================
+      var wrongRun = null;         // いまの まちがいの動き { ch, timers, mark }（なければ null）
+
+      // ❌ のバッジ（うすいクリーム色の丸に、茶のふち。太くて丸い ✕ は線で描く。文字・絵文字は使わない）
+      function makeWrongMark() {
+        var el = document.createElement("div");
+        el.className = "wrong-mark";
+        el.setAttribute("aria-hidden", "true");
+        el.innerHTML = '<svg viewBox="0 0 100 100" width="100%" height="100%" focusable="false">' +
+          '<circle cx="50" cy="50" r="46" fill="#fff6dc" stroke="#6b4a2f" stroke-width="5"/>' +
+          '<path d="M 32 32 L 68 68 M 68 32 L 32 68" fill="none" stroke="#7b8aa0" stroke-width="12" stroke-linecap="round"/>' +
+          '</svg>';
+        return el;
+      }
+
+      // 上のくるまの点線のわくの、画面での中心と短い辺の長さ
+      function holeScreen() {
+        var h = PARTS[target.id].hole;
+        var r = target.car.el.getBoundingClientRect();
+        var rate = r.width / target.car.width;
+        var cx = h.shape === "circle" ? h.x : h.x + h.w / 2;
+        var cy = h.shape === "circle" ? h.y : h.y + h.h / 2;
+        var short = h.shape === "circle" ? h.r * 2 : Math.min(h.w, h.h);
+        return { x: r.left + cx * rate, y: r.top + cy * rate, short: short * rate };
+      }
+
+      // まちがいの動きを、きれいに片づける（部品を元のカードへ戻し、❌・とぶ箱・data-wrong を外す）
+      function cleanupWrong() {
+        var run = wrongRun;
+        if (!run) return;
+        wrongRun = null;
+        for (var i = 0; i < run.timers.length; i++) clearTimeout(run.timers[i]);
+        if (run.mark && run.mark.parentNode) run.mark.parentNode.removeChild(run.mark);
+        var ch = run.ch;
+        if (ch.flyEl) {
+          // 部品を、カードの飾りの箱へ戻す（大きさ・場所・傾きも元どおり）
+          var svg = ch.svg;
+          svg.style.transition = "";
+          svg.style.transform = "";
+          svg.style.transformOrigin = "";
+          svg.style.opacity = "";
+          svg.style.width = "";
+          svg.style.height = "";
+          ch.deco.appendChild(svg);
+          fitPart(ch);
+          var tiltDef = PART_TILT[ch.id];
+          ch.deco.style.transform = tiltDef ? "rotate(" + tiltDef.deg + "deg) scale(" + tiltDef.k + ")" : "";
+          if (ch.flyEl.parentNode) ch.flyEl.parentNode.removeChild(ch.flyEl);
+          ch.flyEl = null;
+        }
+        setHoleQ("");                     // 「？」を もとに戻す
+        body.removeAttribute("data-wrong");
+      }
+      // わくの「？」の明るさ（"0" で消す、"" でもとに戻す）
+      function setHoleQ(v) {
+        if (!target || !target.hole) return;
+        var q = target.hole.querySelector(".hole-q");
+        if (q) q.style.opacity = v;
+      }
+      // 正解をさわったときなど：まちがいの動きの途中でも すぐ片づけて、上の文字は のちほど正解の名前に変わる
+      function cancelWrong() {
+        if (!wrongRun) return;
+        cleanupWrong();
+      }
+
+      function startWrong(ch) {
+        var run = { ch: ch, timers: [], mark: null };
+        wrongRun = run;
+        body.setAttribute("data-wrong", "true");
+        wrongCount++;
+        var hs = holeScreen();
+        var d = Math.max(28, Math.min(56, hs.short * 0.6));
+        function at(ms, fn) { run.timers.push(setTimeout(fn, ms)); }
+        function placeMark() {
+          var m = makeWrongMark();
+          m.style.left = (hs.x - d / 2) + "px";
+          m.style.top = (hs.y - d / 2) + "px";
+          m.style.width = d + "px";
+          m.style.height = d + "px";
+          run.mark = m;
+          document.body.appendChild(m);
+          return m;
+        }
+
+        if (reduced()) {
+          // 動きを減らす設定：部品は動かさない。❌ が 0.8秒だけ出て消える。音は その場で1回
+          placeMark().style.opacity = "1";
+          setHoleQ("0");
+          showNameMessage("ちがうよ", "wrong");
+          K.sound.playPoyon();
+          at(WRONG_REDUCED, function () { finishWrong(run); });
+          return;
+        }
+
+        // 0〜0.5秒：部品がとぶ。行き先は、わくの中心から、カードの方へ わくの短い辺の 0.4倍 ずらした場所
+        var svg = ch.svg;
+        var tiltCss = ch.deco.style.transform;
+        ch.deco.style.transform = "none";
+        var r0 = svg.getBoundingClientRect();
+        var size = destRect(ch.vb);                           // くっついたときの大きさ
+        var dx = (r0.left + r0.width / 2) - hs.x;
+        var dy = (r0.top + r0.height / 2) - hs.y;
+        var len = Math.sqrt(dx * dx + dy * dy) || 1;
+        // 部品の中心が、わくの縁の少し外に来るように止める（わくの中には入らない）。
+        // カードに戻りすぎないよう、わくの中心からカードの中心までの 0.7倍までにする
+        var gap = Math.min(hs.short * 0.5 + Math.min(size.w, size.h) * 0.25, len * 0.7);
+        var cx = hs.x + dx / len * gap;
+        var cy = hs.y + dy / len * gap;
+        var to = { left: cx - size.w / 2, top: cy - size.h / 2, w: size.w, h: size.h };
+        var box = makeFlyBox(r0.left, r0.top, r0.width, r0.height, svg);
+        ch.flyEl = box.h;
+        if (tiltCss) {
+          svg.style.transformOrigin = "50% 50%";
+          svg.style.transform = tiltCss;
+        }
+        void box.h.offsetWidth;
+        function go(h, v, s, tilt, ms) {
+          var t = "transform " + ms + "ms ease-in-out";
+          box.h.style.transition = t;
+          box.v.style.transition = t;
+          box.s.style.transition = t;
+          svg.style.transition = t;
+          box.h.style.transform = "translateX(" + h + "px)";
+          box.v.style.transform = "translateY(" + v + "px)";
+          box.s.style.transform = "scale(" + s + ")";
+          if (tiltCss) svg.style.transform = tilt ? tiltCss : "none";
+        }
+        go(to.left - r0.left, to.top - r0.top, to.w / r0.width, false, WRONG_FLY);
+        // 0秒：上の文字が「ちがうよ」に変わり始める（消えて → 入れかわり → 出るのに時間がかかるので、
+        //      ❌ が出る 0.5秒には、「ちがうよ」が見えているように、とび始めと同時に始める）
+        showNameMessage("ちがうよ", "wrong");
+
+        // 0.5秒：❌ が ふわっと出る（0.2秒）
+        at(WRONG_FLY, function () {
+          var m = placeMark();
+          m.style.opacity = "0";
+          void m.offsetWidth;
+          m.style.transition = "opacity 200ms ease";
+          m.style.opacity = "1";
+          setHoleQ("0");                    // ❌ が出ているあいだは「？」を消す
+        });
+        // 1.1秒（❌ が消え始めるころ）：上の文字をもとに戻し始める
+        at(WRONG_BACK_AT + 200, function () {
+          if (message.getAttribute("data-showing") !== "title") showNameMessage(TITLE_TEXT, "title");
+        });
+        // 1.5秒：❌ が消え終わったら、「？」がもどる
+        at(WRONG_FLY + 200 + 500 + 300, function () { setHoleQ(""); });
+        // 1.2秒：❌ が ふわっと消える（0.3秒）
+        at(WRONG_FLY + 200 + 500, function () {
+          if (run.mark) {
+            run.mark.style.transition = "opacity 300ms ease";
+            run.mark.style.opacity = "0";
+          }
+        });
+        // 0.9秒：部品が元のカードへ戻る（0.5秒）。「ぽよん」を1回
+        at(WRONG_BACK_AT, function () {
+          go(0, 0, 1, true, WRONG_FLY);
+          K.sound.playPoyon();
+        });
+        at(WRONG_TOTAL, function () { finishWrong(run); });
+      }
+
+      // 動きがおわったとき：片づけて、上の文字をもとに戻す。2回まちがえていたら、正解のカードを光らせる
+      function finishWrong(run) {
+        if (wrongRun !== run) return;
+        cleanupWrong();
+        if (message.getAttribute("data-showing") !== "title") showNameMessage(TITLE_TEXT, "title");
+        if (wrongCount >= C.HINT_AFTER && scene === "ask") {
+          var right = correctChoice();
+          if (right) {
+            C.glow(right.glowBox, GLOW_WIDTH);
+            right.el.classList.add("hint-on");       // 台のふちと まわりも、やわらかく光らせる（大きな部品でも見えるように）
+            body.setAttribute("data-hint", "glow");
+          }
         }
       }
 
