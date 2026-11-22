@@ -399,7 +399,7 @@
       var ENTER_TOTAL = 1500;    // 入ってくるのに かかる時間
       var REDUCED_FADE = 450;    // 動きを減らす設定：行く・出るの ふわっと の時間（合わせて DRIVE_IN と同じ）
       var REDUCED_LEAVE = 500;   // 動きを減らす設定：走りさりの代わりに その場で消える時間
-      var HINT_TEXT_DELAY = 10000;   // 問題が出てから、ヒントの文字を出すまで（さわっていても、いなくても同じ。1問に1回）
+      var HINT_TEXT_DELAY = 8000;  // 問題が出てから、ヒントの文字を出すまで（さわっていても、いなくても同じ。1問に1回）
       var MIN_HINT_FONT = 14;    // ヒントの文字の大きさの下限（せまい画面では、横に入る大きさまで小さくする）
       var NUDGE_TIME = 8000;     // 2問目から：さわらないでいると「えらんでね」を1回出すまで
       var MIN_STEP = 40;         // 1歩の長さの最低（走る時間の計算のもと）
@@ -677,13 +677,15 @@
           '<circle cx="214" cy="240" r="14" fill="#5cb85c"/><circle cx="234" cy="245" r="11" fill="#4aa14a"/></g>';
         // ふとんに寝て、おでこに青い氷のう。目はおだやかに とじている（つらそうな顔にしない）。あたまは大きく
         var before = '<rect x="236" y="182" width="178" height="26" rx="12" fill="#e3b98a" ' + LNS + '/>' +
+          '<rect x="244" y="150" width="64" height="32" rx="13" fill="#ffffff" ' + LNS + '/>' +
+          // 頭は、よこになる：あたまの上（髪・氷のう）が左、あごが右（ふとんの方）
+          '<g transform="rotate(-90 276 158)">' +
           '<g ' + LNS + '>' +
-          '<rect x="244" y="150" width="64" height="32" rx="13" fill="#ffffff"/>' +
           '<circle cx="276" cy="158" r="23" fill="#e9b98f"/>' +
           '<path d="M 253 154 A 23 23 0 0 1 299 154 Q 276 138 253 154 Z" fill="' + HAIR + '"/>' +
           '<ellipse cx="276" cy="141" rx="16" ry="9" fill="#6fb4e8"/></g>' +
           '<path d="M 264 140 Q 276 134 288 140" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round"/>' +
-          '<path d="M 264 160 Q 268 164 272 160 M 280 160 Q 284 164 288 160 M 270 171 Q 276 174 282 171" fill="none" stroke="' + LN + '" stroke-width="2" stroke-linecap="round"/>' +
+          '<path d="M 264 160 Q 268 164 272 160 M 280 160 Q 284 164 288 160 M 270 171 Q 276 174 282 171" fill="none" stroke="' + LN + '" stroke-width="2" stroke-linecap="round"/></g>' +
           '<rect x="294" y="170" width="120" height="38" rx="15" fill="#d4a373" ' + LNS + '/>' +
           '<path d="M 296 182 Q 296 170 310 170 L 404 170" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>';
         // ふとんの上に すわって、目をあけて にっこり。手をふる。氷のうはなし。そばに小さな花
@@ -1619,6 +1621,9 @@
             if (!sceneObj) return;
             sceneObj.el.style.transition = "opacity " + SCENE_OUT + "ms ease";
             sceneObj.el.style.opacity = "0";
+            // 場面と いっしょに、右へのびる細い道も消す（背景の木や家を、横の線で切らないように）
+            sceneRoad.style.transition = "opacity " + SCENE_OUT + "ms ease";
+            sceneRoad.style.opacity = "0";
           }, hold - SCENE_OUT);
         } else {
           // 動きを減らす設定：走らず、その場で ふわっと消える。前の場面は、次に移るときに すぐ外す
@@ -1645,6 +1650,12 @@
         void sceneObj.el.offsetWidth;
         sceneObj.el.style.transition = "opacity " + SCENE_IN + "ms ease";
         sceneObj.el.style.opacity = "1";
+        // 細い道は、場面と いっしょに ふわっと出る（場面がないあいだは、見えない）
+        sceneRoad.style.transition = "none";
+        sceneRoad.style.opacity = "0";
+        void sceneRoad.offsetWidth;
+        sceneRoad.style.transition = "opacity " + SCENE_IN + "ms ease";
+        sceneRoad.style.opacity = "1";
 
         var i;
         if (!reduced()) {
