@@ -2127,15 +2127,16 @@
   //    右にピンクの運転席、うしろに大きな四角い荷物の箱。箱の横の板（パネル）が、上のはしをちょうつがいにして、
   //    つばさのように上へひらき、中のうすい灰色と茶色の荷物の箱3つが見える。ピンク1色。タイヤ3つ
   //    会社名・電話番号・ロゴ・動物のマーク・色の帯は描かない（文字もなし）
-  //    仕事（0.9秒）：板が、2つの面（上の面・下の面）に分かれて、ちょうつがい（y 74）で折りたたまれながら（Z字に）ひらく。
-  //      横から見た「ひらき方」を、面ごとの縦の大きさ（scale）の変化で表す。
-  //      ① 上の面（閉じた形 .panel-hi → ひらいた形 .wing-hi。ちょうつがいが (0, 0)）が もちあがる（0〜40%）
-  //      ② 下の面（.panel-lo → .wing-lo。入れ子）が ひらく（30〜60%。上の面と下の面は、左右に ずれた平行四辺形のZ字）
-  //      ③ ひらいたまま止まる（60〜75%。中の荷物の箱3つが見える）
-  //      ④ 逆にたどる（下の面が たたまれて 70〜80%、上の面が 75〜90%、閉じた面が戻る 88〜100%）
-  //    .wing-hi・.wing-lo は、ふだんは scale(1, 0)・opacity: 0（閉じているときに線が残らない）。ひらいているあいだだけ opacity 1
-  //    いちばん動いたとき（外わく）：上の面は y 74 − 23 ＝ 51 〜 74（x 12〜216）、下の面は y 28 〜 51（x 22〜216）。
-  //      上のはし y 28（線をふくめて 26.5）、左のはし x 12（線をふくめて 10.5）、右のはし x 216。枠の中（y 0 をこえない）
+  //    仕事（0.9秒）：横の板1枚（折りたたまない）が、上のはしのちょうつがい（y 74）を中心に、直角をこえるまで ひらく。
+  //      板のローカル座標（u ＝ x、d ＝ ちょうつがいから下へ 0〜86）を、斜めの投影で動かす：
+  //        x' ＝ u ＋ k·sinθ × d、y' ＝ (cosθ − m·sinθ) × d（k ＝ 0.25、m ＝ 0.35。θ：ぶら下がり 0度、水平 90度、上向き 105度）
+  //        ＝ CSS の matrix(1, 0, k·sinθ, cosθ − m·sinθ, 0, 0)。θ 0・30・60・90・105度 を 0・15・30・45・55% に置く。
+  //      ひらいて止まる（55〜70%。中の荷物の箱3つが見える）→ 逆にたどって戻る（100%）。
+  //      90度をこえたころから、板の内がわ（うすいピンク。.wing-back）が見える（ふだんは opacity 0）
+  //    いちばん動いたとき（θ 105度：c ＝ 0.2415、dd ＝ −0.597）の板の4つの角（u, d）→ 場面の (x, y ＝ 74 ＋ y')：
+  //      (22, 0) → (22, 74)、(216, 0) → (216, 74)、(22, 86) → (22 ＋ 20.8, 74 − 51.3) ＝ (42.8, 22.7)、
+  //      (216, 86) → (236.8, 22.7)。上のはし y 22.7（線をふくめて 21.2）で枠の上 y 0 の中、右のはし x 236.8 で 310 の中。
+  //      90度のとき：上のはし y 43.9。どの時点も、y 21 より上、x 20 より左、x 238 より右には出ない
   // =====================================================
   add({
     id: "wingtruck",
@@ -2167,31 +2168,23 @@
           '<rect x="24" y="76" width="9" height="82" fill="#cdd3da" stroke="none"/>' +
           boxes) +
         // 横の板（閉じた形）と、ひらいた板（Z字に折りたたまれながらひらく形）。(0, 74) が (0, 0)＝ちょうつがい
-        //   閉じた形：.panel-hi（上の面 y 0〜43）の中に、入れ子で .panel-lo（下の面。折れ目 y 43 が (0, 0)）。
-        //   ひらいた形：.wing-hi（上の面。ちょうつがいが (0, 0)。上へ y −23〜0）の中に、入れ子で .wing-lo
-        //   （下の面。.wing-hi の上のはし (−10, −23) が (0, 0)。さらに上へ 23）。どれも (0, 0) 中心でのび縮み
+        //   横の板1枚（.wing-panel）。ちょうつがい（上のはし y 74）が (0, 0)。板のローカル座標は
+        //   u ＝ x（22〜216）、d ＝ 下へ 0〜86。ふだんは、今までの閉じた横の板と同じ形（x 22〜216・y 74〜160）
         part("panel",
           '<g transform="translate(0 74)">' +
-            '<g class="panel-hi">' +
-              '<rect x="22" y="0" width="194" height="43" rx="4" fill="' + p.main + '"/>' +
+            '<g class="wing-panel">' +
+              '<rect x="22" y="0" width="194" height="86" rx="4" fill="' + p.main + '"/>' +
+              '<rect x="28" y="76" width="182" height="5" rx="2.5" fill="' + p.shade + '" stroke="none"/>' +
               '<path d="M 30 14 L 208 14" fill="none" stroke="' + p.light + '" stroke-width="4"/>' +
-              '<g fill="none" stroke-width="2"><path d="M 70.5 22 L 70.5 38"/><path d="M 119 22 L 119 38"/><path d="M 167.5 22 L 167.5 38"/></g>' +
-              '<g transform="translate(0 43)"><g class="panel-lo">' +
-                '<rect x="22" y="0" width="194" height="43" rx="4" fill="' + p.main + '"/>' +
-                '<rect x="28" y="33" width="182" height="5" rx="2.5" fill="' + p.shade + '" stroke="none"/>' +
-                '<g fill="none" stroke-width="2"><path d="M 70.5 6 L 70.5 27"/><path d="M 119 6 L 119 27"/><path d="M 167.5 6 L 167.5 27"/></g>' +
-              '</g></g>' +
-            '</g>' +
-            // ひらいた形：上の面は左へ、下の面は右へ ずれた平行四辺形（Z字）。うらがわのうすい色と、ふちの厚み
-            '<g class="wing-hi">' +
-              '<path d="M 22 0 L 216 0 L 206 -23 L 12 -23 Z" fill="#e8a0ba"/>' +
-              '<path d="M 14 -23 L 204 -23 L 204 -19 L 12 -19 Z" fill="' + p.shade + '" stroke="none"/>' +
-              '<path d="M 20 -4 L 214 -4" fill="none" stroke="' + p.light + '" stroke-width="3"/>' +
-              '<g transform="translate(-10 -23)"><g class="wing-lo">' +
-                '<path d="M 22 0 L 216 0 L 226 -23 L 32 -23 Z" fill="' + p.light + '"/>' +
-                '<path d="M 24 -23 L 224 -23 L 224 -19 L 22 -19 Z" fill="' + p.shade + '" stroke="none"/>' +
-                '<path d="M 40 -9 L 206 -9" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.5"/>' +
-              '</g></g>' +
+              '<g fill="none" stroke-width="2">' +
+                '<path d="M 70.5 24 L 70.5 70"/><path d="M 119 24 L 119 70"/><path d="M 167.5 24 L 167.5 70"/>' +
+              '</g>' +
+              // 板の内がわ（ひらいたとき見える うすいピンク。ふだんは opacity 0）
+              '<g class="wing-back">' +
+                '<rect x="22" y="0" width="194" height="86" rx="4" fill="' + p.light + '"/>' +
+                '<path d="M 30 72 L 208 72" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.5"/>' +
+                '<rect x="28" y="6" width="182" height="5" rx="2.5" fill="' + p.main + '" stroke="none"/>' +
+              '</g>' +
             '</g>' +
           '</g>' +
           // ちょうつがい（2つ。動かない）
@@ -2202,24 +2195,19 @@
         tire(60) + tire(140) + tire(250);
     },
     css:
-      ".kuruma-car .panel-hi, .kuruma-car .panel-lo, .kuruma-car .wing-hi, .kuruma-car .wing-lo { transform-origin: 0 0; }\n" +
-      /* ひらいた面は、ふだんは見えない・大きさ 0（閉じているとき、線が残らない） */
-      ".kuruma-car .wing-hi, .kuruma-car .wing-lo { transform: scale(1, 0); opacity: 0; }\n" +
-      ".kc-wingtruck.kw-on .panel-hi { animation: kuruma-wingtruck-phi 0.9s ease-in-out; }\n" +
-      ".kc-wingtruck.kw-on .panel-lo { animation: kuruma-wingtruck-plo 0.9s ease-in-out; }\n" +
-      ".kc-wingtruck.kw-on .wing-hi { animation: kuruma-wingtruck-whi 0.9s ease-in-out; }\n" +
-      ".kc-wingtruck.kw-on .wing-lo { animation: kuruma-wingtruck-wlo 0.9s ease-in-out; }\n" +
-      /* ① 上の面がもちあがる（0〜40%）、② 下の面がひらく（30〜60%）、③ 止まる（60〜75%）、④ 下の面 → 上の面の順に たたんで戻る */
-      "@keyframes kuruma-wingtruck-phi { 0% { transform: scale(1, 1); } 40%, 88% { transform: scale(1, 0); }" +
-      " 100% { transform: scale(1, 1); } }\n" +
-      "@keyframes kuruma-wingtruck-plo { 0% { transform: scale(1, 1); } 25%, 90% { transform: scale(1, 0); }" +
-      " 100% { transform: scale(1, 1); } }\n" +
-      "@keyframes kuruma-wingtruck-whi { 0% { transform: scale(1, 0); opacity: 0; } 1% { transform: scale(1, 0); opacity: 1; }" +
-      " 40%, 75% { transform: scale(1, 1); opacity: 1; } 90% { transform: scale(1, 0); opacity: 1; }" +
-      " 90.1%, 100% { transform: scale(1, 0); opacity: 0; } }\n" +
-      "@keyframes kuruma-wingtruck-wlo { 0%, 30% { transform: scale(1, 0); opacity: 0; } 31% { transform: scale(1, 0); opacity: 1; }" +
-      " 60%, 70% { transform: scale(1, 1); opacity: 1; } 80% { transform: scale(1, 0); opacity: 1; }" +
-      " 80.1%, 100% { transform: scale(1, 0); opacity: 0; } }\n",
+      ".kuruma-car .wing-panel { transform-origin: 0 0; }\n" +
+      /* 板の内がわは、ふだんは見えない（opacity 0） */
+      ".kuruma-car .wing-back { opacity: 0; }\n" +
+      ".kc-wingtruck.kw-on .wing-panel { animation: kuruma-wingtruck-open 0.9s ease-in-out; }\n" +
+      ".kc-wingtruck.kw-on .wing-back { animation: kuruma-wingtruck-back 0.9s ease-in-out; }\n" +
+      /* θ（ぶら下がり 0度 → 水平 90度 → 上向き 105度）の5点。matrix(1, 0, 0.25 × sinθ, cosθ − 0.35 × sinθ, 0, 0)
+         θ 0度 (0, 1)・30度 (0.125, 0.691)・60度 (0.2165, 0.197)・90度 (0.25, −0.35)・105度 (0.2415, −0.597) */
+      "@keyframes kuruma-wingtruck-open { 0% { transform: matrix(1, 0, 0, 1, 0, 0); }" +
+      " 15% { transform: matrix(1, 0, 0.125, 0.691, 0, 0); } 30% { transform: matrix(1, 0, 0.2165, 0.197, 0, 0); }" +
+      " 45% { transform: matrix(1, 0, 0.25, -0.35, 0, 0); } 55%, 70% { transform: matrix(1, 0, 0.2415, -0.597, 0, 0); }" +
+      " 100% { transform: matrix(1, 0, 0, 1, 0, 0); } }\n" +
+      /* 90度をこえて（35〜45%）から、内がわのうすい色が見える */
+      "@keyframes kuruma-wingtruck-back { 0%, 35% { opacity: 0; } 45%, 70% { opacity: 1; } 85%, 100% { opacity: 0; } }\n",
     // 「ウィーン・パタン」：トラックの低い音（sawtooth 95Hz、800Hz でやわらかく）に、小さなモーターの音（triangle 140 → 170Hz）と、
     //   閉じる「パタン」（0.55秒に 低い sine ＋ 500Hz のごく小さな にごり）。タクシーの「パタン」と近いので、
     //   聞きくらべで確かめる（近すぎたら高さを変える）。0.7秒
