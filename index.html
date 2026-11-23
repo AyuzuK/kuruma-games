@@ -146,12 +146,32 @@
       justify-content: center;
       gap: 24px;
     }
-    /* 1つぶんの場所。ボタン（ふちをふくめて 312 × 252）＋下の影 10px＋ゆれて上がる 4px ＋ゆとり 2px */
+    /* 1つぶんの場所。ボタン（ふちをふくめて 312 × 252）＋下の影 10px＋ゆれて上がる 4px ＋ゆとり 2px。
+       そのうえ、ボタンの下に「名前の帯」（高さ 36px ＝ 上のあき 4 ＋ 2行 × 16）をとる。
+       名前の帯は縮めない（率 --k が小さくても、文字が読める大きさのまま）。1行で足りるときも 2行ぶんの高さをとる */
     .slot {
       position: relative;
       flex: none;
       width: calc(312px * var(--k, 1));
-      height: calc(268px * var(--k, 1));
+      height: calc(268px * var(--k, 1) + 36px);
+    }
+    /* ゲームの名前（大人のための小さな文字。子どもは絵で選ぶ）。ボタンの下。ゆれない。
+       横はばはボタンより左右 8px ずつ広い（ボタンのあいだの 24px のうち 8px ずつ使う）。
+       かたまり（.game-name span）の中では折り返さず、かたまりのあいだだけで次の行へ */
+    .game-name {
+      position: absolute;
+      left: -8px;
+      top: calc(268px * var(--k, 1) + 4px);
+      width: calc(312px * var(--k, 1) + 16px);
+      font-size: 13px;
+      font-weight: bold;
+      line-height: 16px;
+      color: #333;
+      text-align: center;
+      cursor: pointer;
+    }
+    .game-name span {
+      white-space: nowrap;
     }
     .slot-inner {
       position: absolute;
@@ -304,7 +324,7 @@
   <div class="slot"><div class="slot-inner">
   <!-- ショベルカーのゲームへのボタン。
        ファイルをダブルクリックで開いたときも動くように、index.html まで書く -->
-  <a class="game-button" id="shovelGame" href="games/01-shovel/index.html" aria-label="しょべるかー">
+  <a class="game-button" data-name="しょべるかー" id="shovelGame" href="games/01-shovel/index.html" aria-label="しょべるかー">
     <div class="ground"></div>
     <!-- ショベルカーの絵（ゲームの中の絵を写したもの。この画面では動かさない）。
          座標の枠は 横300 × 縦220（左上が 0,0、y は下向きに増える）。
@@ -512,7 +532,7 @@
   <div class="slot"><div class="slot-inner">
   <!-- 「はたらくくるま しゅっぱつ！」へのボタン。
        ファイルをダブルクリックで開いたときも動くように、index.html まで書く -->
-  <a class="game-button mixer-button" id="shuppatsuGame" href="games/02-shuppatsu/index.html" aria-label="はたらくくるま しゅっぱつ">
+  <a class="game-button mixer-button" data-name="はたらくくるま/しゅっぱつ！" id="shuppatsuGame" href="games/02-shuppatsu/index.html" aria-label="はたらくくるま しゅっぱつ">
     <div class="road"></div>
     <!-- ミキサーしゃの絵（ゲームの図鑑の絵を写したもの。この画面では動かさない）。
          座標の枠は 横300 × 縦220。この画面の中で名前（id）がぶつからないように、id の先頭に top2- を付けてある。
@@ -591,7 +611,7 @@
   <div class="slot"><div class="slot-inner">
   <!-- 「このくるまなーんだ？」へのボタン。
        ファイルをダブルクリックで開いたときも動くように、index.html まで書く -->
-  <a class="game-button kage-button" id="kageGame" href="games/03-kage/index.html" aria-label="このくるまなーんだ">
+  <a class="game-button kage-button" data-name="このくるま/なーんだ？" data-name-glue="none" id="kageGame" href="games/03-kage/index.html" aria-label="このくるまなーんだ">
     <!-- 奥から順に：光の丸 → 道と草 → 台 → かげのしょうぼうしゃ → 色のついたしょうぼうしゃ。文字は入れない -->
     <div class="kage-spot"></div>
     <div class="road"></div>
@@ -687,7 +707,7 @@
   <div class="slot"><div class="slot-inner">
   <!-- 「しゅつどう！ どの くるま？」へのボタン。
        ファイルをダブルクリックで開いたときも動くように、index.html まで書く -->
-  <a class="game-button shutsudou-button" id="top4-shutsudouGame" href="games/04-shutsudou/index.html" aria-label="しゅつどう どの くるま">
+  <a class="game-button shutsudou-button" data-name="しゅつどう！/どの くるま？" id="top4-shutsudouGame" href="games/04-shutsudou/index.html" aria-label="しゅつどう どの くるま">
     <div class="road"></div>
     <!-- 高い木の ねこを、しょうぼうしゃが はしごで助けるところ（ゲームの場面を単純にして写したもの。
          この画面では動かさない。文字は入れない）。奥から順に：木 → ねこ → しょうぼうしゃ（はしご） -->
@@ -731,7 +751,7 @@
   <div class="slot"><div class="slot-inner">
   <!-- 「たりない ぶひんは どれ？」へのボタン。
        ファイルをダブルクリックで開いたときも動くように、index.html まで書く -->
-  <a class="game-button buhin-button" id="top5-buhinGame" href="games/05-buhin/index.html" aria-label="たりない ぶひんは どれ">
+  <a class="game-button buhin-button" data-name="たりない/ぶひんは どれ？" id="top5-buhinGame" href="games/05-buhin/index.html" aria-label="たりない ぶひんは どれ">
     <div class="road"></div>
     <!-- 荷台が足りない ダンプカー（荷台の場所は「？」の点線のわく）と、上から とんでくる荷台
          （ゲームの図鑑の絵を単純にして写したもの。この画面では動かさない。文字は入れない）。
@@ -792,39 +812,75 @@
   <script>
     // 指が触れた瞬間に、ボタンを沈ませてからゲームを開く
     // （ゲームと同じく、指がすべっても反応するように pointerdown を使う）
+    function pressButton(button, e) {
+      if (!e.isPrimary) return;          // 手のひらで触っても1回だけ
+      button.classList.add("pressed");
+      setTimeout(function () {
+        window.location.href = button.getAttribute("href");
+      }, 150);                           // 沈んだのが見えるくらい、少しだけ待つ
+    }
     document.querySelectorAll(".game-button").forEach(function (button) {
-      button.addEventListener("pointerdown", function (e) {
-        if (!e.isPrimary) return;          // 手のひらで触っても1回だけ
-        button.classList.add("pressed");
-        setTimeout(function () {
-          window.location.href = button.getAttribute("href");
-        }, 150);                           // 沈んだのが見えるくらい、少しだけ待つ
+      button.addEventListener("pointerdown", function (e) { pressButton(button, e); });
+
+      // ボタンの下に、ゲームの名前を出す（大人のための小さな文字。縮めない）。
+      //   名前は、ボタンの data-name を「/」で分けた かたまりごとに <span>（かたまりの中では折り返さない）にして、
+      //   かたまりのあいだに半角スペースを入れる（data-name-glue="none" のときは入れず、折り返せる境目 wbr だけ入れる）。
+      //   読み上げは今のボタンの aria-label に任せるので、名前の箱は aria-hidden。
+      //   名前をさわっても、その上のボタンをさわったのと同じにする
+      var slot = button.closest(".slot");
+      var label = document.createElement("div");
+      label.className = "game-name";
+      label.setAttribute("aria-hidden", "true");
+      var chunks = (button.getAttribute("data-name") || "").split("/");
+      var glue = button.getAttribute("data-name-glue") === "none" ? "" : " ";
+      chunks.forEach(function (text, i) {
+        // かたまりのあいだ：スペースを入れる。data-name-glue="none" のときは、スペースを出さずに折り返せる境目（wbr）だけ
+        if (i > 0) label.appendChild(glue ? document.createTextNode(glue) : document.createElement("wbr"));
+        var span = document.createElement("span");
+        span.textContent = text;
+        label.appendChild(span);
       });
+      label.addEventListener("pointerdown", function (e) { pressButton(button, e); });
+      slot.appendChild(label);
     });
 
-    // ボタンが5つ並んで画面に入るように、並べ方と、縮める率（0.3〜1）を、いっしょに決める。
-    //   並べ方の候補は4つ：縦1列（col）・横1列（row）・2列×3段（grid）・3列×2段（grid3）。
-    //   それぞれの率を計算して、いちばん大きい率の並べ方を選ぶ（同じ率なら grid → grid3 → col → row の順）。
+    // ボタンがいくつ並んでも画面に入るように、並べ方と、縮める率（0.3〜1）を、いっしょに決める。
+    //   並べ方の表 LAYOUTS（縦1列 col・横1列 row・2列 grid・3列 grid3）と、ボタンの数 N から、
+    //   どの並べ方も 次の1つの式で率を出す（ボタンを足しても、式を書きかえなくてよい）：
+    //     k ＝ min(1, (横幅 − 32 − 24 × (列 − 1)) ÷ (312 × 列),
+    //                 (高さ − 段のあいだ × (段 − 1) − 名前の帯 × 段) ÷ (268 × 段))
+    //   段 ＝ ボタンの数 ÷ 列（切り上げ）。いちばん大きい率の並べ方を選ぶ（同じ率なら 表の上から）。
     //   選んだ並べ方は、ボタンを並べる箱の data-layout に書き、見た目の切りかえは CSS が行う。
     //   2列・3列のときは、箱の横はばを「列の数ぶん」に決めて折り返し、最後の段は まん中に寄せる。
-    //   ボタンの場所は 312 × 268、あいだは 24px、画面のはしからは 16px、題名とボタンのあいだは 24px あける。
+    //   ボタンの場所は 312 × 268、列のあいだは 24px、画面のはしからは 16px、題名とボタンのあいだは 24px あける。
+    //   名前の帯（LABEL_H ＝ 36px。ボタンの下の ゲームの名前の場所）を、1段ごとにとる。
+    //   段のあいだ（ROW_GAP）は、縦に詰めて ボタンを大きくするため 16px。
     // 画面の大きさが変わったときだけ計算する（すぐ1回と、0.3秒あとにもう1回）
     var games = document.getElementById("games");
     var title = document.querySelector(".title");
     var fitTimer = null;
+    var LABEL_H = 36;
+    var ROW_GAP = 16;
+    var BUTTON_COUNT = document.querySelectorAll(".slot").length;
+    var LAYOUTS = [
+      { layout: "grid",  cols: 2 },
+      { layout: "grid3", cols: 3 },
+      { layout: "col",   cols: 1 },
+      { layout: "row",   cols: BUTTON_COUNT }
+    ];
+    games.style.rowGap = ROW_GAP + "px";
     function fitButtons() {
       var w = window.innerWidth;
       var h = window.innerHeight;
       var room = h - 32 - title.offsetHeight - 24;      // 題名の下で、ボタンに使える高さ
-      var options = [
-        { layout: "grid",  cols: 2, k: Math.min(1, (w - 32 - 24) / (312 * 2), (room - 24 * 2) / (268 * 3)) },
-        { layout: "grid3", cols: 3, k: Math.min(1, (w - 32 - 24 * 2) / (312 * 3), (room - 24) / (268 * 2)) },
-        { layout: "col",   cols: 1, k: Math.min(1, (w - 32) / 312, (room - 24 * 4) / (268 * 5)) },
-        { layout: "row",   cols: 5, k: Math.min(1, (w - 32 - 24 * 4) / (312 * 5), room / 268) }
-      ];
-      var best = options[0];
-      for (var i = 1; i < options.length; i++) {
-        if (options[i].k > best.k) best = options[i];
+      var best = null;
+      for (var i = 0; i < LAYOUTS.length; i++) {
+        var cols = LAYOUTS[i].cols;
+        var rows = Math.ceil(BUTTON_COUNT / cols);
+        var k = Math.min(1,
+          (w - 32 - 24 * (cols - 1)) / (312 * cols),
+          (room - ROW_GAP * (rows - 1) - LABEL_H * rows) / (268 * rows));
+        if (!best || k > best.k) best = { layout: LAYOUTS[i].layout, cols: cols, k: k };
       }
       var k = Math.max(0.3, best.k);
       games.setAttribute("data-layout", best.layout);

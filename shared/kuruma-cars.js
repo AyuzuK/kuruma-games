@@ -3,7 +3,8 @@
    くるまごとに、次のことを書いておく。
      id      … 図鑑の名前（mixer など）
      name    … ひらがなの名前
-     color   … 主な色の組（orange・blue・yellow・green・red・white・silver・purple・pink・rainbow など）。
+     color   … 主な色の組（orange・blue・yellow・green・red・white・silver・purple・pink・rainbow・sky・lime など）。
+               sky（水色）と lime（きみどり）は、図鑑のアップデート2で足した組
                A の登場順で、となり合うくるまの色がかぶらないようにするために使う
      width   … 絵の横幅（縦はどのくるまも 220。タイヤ・キャタピラの下は y 215）
      tip     … 指マークの指先を置く場所（絵の中の x, y）
@@ -176,6 +177,9 @@
   var TOWWHITE = { main: "#f6f8fb", light: "#ffffff", shade: "#c5d0dc" };   // レッカーしゃの運転席（白）
   var SKY    = { main: "#5ec4d6", light: "#8fd8e6", shade: "#3ba3b8" };   // タンクローリーの運転席
   var FIELD_GREEN = { main: "#3fa45b", light: "#6cc47f", shade: "#2e8446" }; // トラクター
+  var PINK   = { main: "#ef8fb0", light: "#f7b5cb", shade: "#d46f93" };   // ウイングトラック
+  var LIME   = { main: "#9ccc3c", light: "#bde07a", shade: "#7aa82a" };   // カーキャリアー
+  var SOFT_RED = { main: "#ec6a5e", light: "#f4928a", shade: "#cc4e43" }; // ゆうびんしゃ（ほかの赤の台より明るいやさしい赤）
 
   // =====================================================
   // 図鑑
@@ -183,7 +187,7 @@
   var defs = {};
   var ids = [];
 
-  // くるまを図鑑に足す（いまは18台。ゲームでの順番は、ゲームの側で決める）
+  // くるまを図鑑に足す（いまは24台。ゲームでの順番は、ゲームの側で決める）
   function add(def) {
     if (!defs[def.id]) ids.push(def.id);
     defs[def.id] = def;
@@ -1911,6 +1915,559 @@
       if (!ctx) return;
       var t = ctx.currentTime;
       S.rumble(ctx, 70, 95, t, 0.75, 0.52, 950, 12, 0.2, 0.7);
+    }
+  });
+
+  // =====================================================
+  // 19. ホイールローダー（loader、横 300）図鑑のアップデート2
+  //    同じ大きさの、でこぼこの太いタイヤが前とうしろに1つずつ。まんなかに窓の大きな高い運転席、
+  //    うしろ（左）にエンジンの箱と短い煙突（煙なし）。前（右）へ、運転席の前から のびるうで1本と、大きなバケット
+  //    オレンジ1色（タイヤのホイールは灰。黄と黒のしま・文字・マークは描かない）
+  //    仕事（0.7秒）：うでが付け根 (140, 102) を中心に、先が上がる向きに 18度 上がり、同時にバケットが
+  //          付け根 (228, 155) を中心に 15度 かたむく（すくって もちあげる）。そのあと戻る。
+  //          バケットは、うで（.loader-lift）の中に入れ子にした .loader-curl で回す
+  //    いちばん動いたときの計算（うで 18度 ＋ バケット 15度 ＝ バケットは合わせて 33度 回る）：
+  //      うでの長さ √(88² + 53²) ≒ 102.7、向き 31.1度 → 13.1度。
+  //      バケットの付け根 ≒ (140 ＋ 102.7 × cos13.1°, 102 ＋ 102.7 × sin13.1°) ≒ (240.0, 125.2)
+  //      バケットの形（付け根が (0, 0)）は、横 −9〜+34、縦 −25〜+46 の中。33度（左回り）回すと、
+  //        x' ＝ x × cos33° ＋ y × sin33°、y' ＝ −x × sin33° ＋ y × cos33°
+  //        いちばん右（前の下の まるい角 (33.3, 44)）：x' ≒ 27.9 ＋ 24.0 ＝ 51.9 → x 291.9（線をふくめて 293.4）
+  //        いちばん上（上のくちびる (14, −24.5)）：y' ≒ −7.6 − 20.5 ＝ −28.1 → y 97.1（線をふくめて 95.6）
+  //      どれも枠（x 5〜295、y 5〜215）の中。ふだんの形は、バケットの右はし x 262（線をふくめて 263.5）、下のはし y 201
+  // =====================================================
+  // 本体：エンジンの箱（うしろ・左）→ 運転席の下 → 前の台 のひと続きの形。
+  //   運転席より先に描いて、運転席の下のはしの線を本体でかくす（運転席のあと、本体を描く）
+  var LOADER_BODY = "M 15 158 L 15 130 Q 15 118 27 118 L 110 118 L 110 125 L 152 125 L 152 128 L 195 128 " +
+    "Q 205 128 205 138 L 205 160 Q 205 170 195 170 L 27 170 Q 15 170 15 158 Z";
+  // バケット（付け根が (0, 0)。口は前（右）向きで、ななめ。下のはしは まるく、とがらせない）
+  var LOADER_BUCKET = "M -8 -6 Q -9 -12 -3 -14 L 11 -23 Q 16 -26 18 -21 L 33 38 Q 36 46 28 46 L 2 46 " +
+    "Q -6 46 -8 38 Q -4 16 -8 -6 Z";
+  add({
+    id: "loader",
+    name: "ほいーるろーだー",
+    color: "orange",
+    width: 300,
+    tip: { x: 120, y: 41 },   // 運転席の屋根の上（横幅の 40%）。うでの上にはかからない
+    workTime: 700,
+    draw: function () {
+      var o = ORANGE;
+      return shadow(138, 128) +
+        // 運転席（高い。窓2枚、屋根は少しはみ出す。中の人は描かない）。下のはしは、あとで描く本体でかくれる
+        part("cab",
+          '<path d="M 88 128 L 88 56 Q 88 47 97 47 L 143 47 Q 152 47 152 56 L 152 128 Z" fill="' + o.main + '" stroke="none"/>' +
+          '<rect x="146" y="56" width="5" height="62" rx="2" fill="' + o.shade + '" stroke="none"/>' +
+          '<path d="M 88 128 L 88 56 Q 88 47 97 47 L 143 47 Q 152 47 152 56 L 152 128 Z" fill="none"/>' +
+          '<rect x="95" y="57" width="39" height="37" rx="5" fill="#bfe4f5" stroke-width="2.5"/>' +
+          '<rect x="138" y="59" width="9" height="33" rx="3.5" fill="#bfe4f5" stroke-width="2.5"/>' +
+          '<g fill="none" stroke="#ffffff" stroke-width="4" opacity="0.7">' +
+            '<path d="M 101 88 L 111 64"/><path d="M 112 88 L 122 64"/>' +
+          '</g>' +
+          '<rect x="96" y="104" width="13" height="4" rx="2" fill="' + LINE + '" stroke="none"/>' +
+          '<rect x="82" y="43" width="76" height="12" rx="6" fill="' + o.main + '"/>' +
+          '<path d="M 90 48 L 150 48" fill="none" stroke="' + o.light + '" stroke-width="3"/>') +
+        // 本体：短い煙突（煙は出さない）と、タイヤのあいだの下の枠（灰）を先に描き、そのあと本体
+        part("body",
+          '<rect x="30" y="98" width="9" height="22" rx="2.5" fill="#4a4a4a"/>' +
+          '<rect x="28" y="94" width="13" height="7" rx="3.5" fill="#4a4a4a"/>' +
+          '<rect x="104" y="160" width="68" height="22" rx="6" fill="#8a8f96"/>' +
+          '<path d="' + LOADER_BODY + '" fill="' + o.main + '" stroke="none"/>' +
+          '<rect x="24" y="122" width="78" height="5" rx="2.5" fill="' + o.light + '" stroke="none"/>' +
+          '<rect x="24" y="161" width="176" height="6" rx="3" fill="' + o.shade + '" stroke="none"/>' +
+          '<path d="' + LOADER_BODY + '" fill="none"/>' +
+          '<g fill="none" stroke-width="3">' +
+            '<path d="M 24 136 L 46 136"/><path d="M 24 144 L 46 144"/><path d="M 24 152 L 46 152"/>' +
+          '</g>') +
+        lights(190, 148, 12, 136) +
+        // タイヤ（トラクターと同じ、でこぼこの太いタイヤ。同じ大きさ。うしろ → 前の順）
+        tractorTire(75, 185, 30, 6, 16, 14) + tractorTire(195, 185, 30, 6, 16, 14) +
+        // うでとバケット（いちばん手前）。うでの付け根 (140, 102) が (0, 0)。
+        // うでは (0, 0) から (88, 53) へまっすぐ。バケットの付け根 (88, 53) へ translate した中で、バケットを (0, 0) 中心に回す
+        part("bucket",
+          '<g transform="translate(140 102)"><g class="loader-lift">' +
+            '<path d="M 0 0 L 88 53" fill="none" stroke-width="18"/>' +
+            '<path d="M 0 0 L 88 53" fill="none" stroke="' + o.main + '" stroke-width="12"/>' +
+            '<path d="M 12 3.5 L 78 43" fill="none" stroke="' + o.light + '" stroke-width="3"/>' +
+            '<path d="M 12 11 L 78 51" fill="none" stroke="' + o.shade + '" stroke-width="3"/>' +
+            '<circle r="7" fill="#c8ccd0" stroke-width="2.5"/>' +
+            '<g transform="translate(88 53)"><g class="loader-curl">' +
+              '<path d="' + LOADER_BUCKET + '" fill="' + o.main + '" stroke="none"/>' +
+              '<path d="M 12 -10 L 26 36" fill="none" stroke="' + o.shade + '" stroke-width="4"/>' +
+              '<path d="M -2 -6 Q 0 20 -1 36" fill="none" stroke="' + o.light + '" stroke-width="3"/>' +
+              // 刃先の銀の帯（丸い帯）
+              '<path d="M 4 41 L 29 41" fill="none" stroke="#c8ccd0" stroke-width="6"/>' +
+              '<path d="' + LOADER_BUCKET + '" fill="none"/>' +
+              '<circle r="6" fill="#c8ccd0" stroke-width="2.5"/>' +
+            '</g></g>' +
+          '</g></g>');
+    },
+    css:
+      ".kuruma-car .loader-lift, .kuruma-car .loader-curl { transform-origin: 0 0; }\n" +
+      ".kc-loader.kw-on .loader-lift { animation: kuruma-loader-lift 0.7s ease-in-out; }\n" +
+      ".kc-loader.kw-on .loader-curl { animation: kuruma-loader-curl 0.7s ease-in-out; }\n" +
+      /* うでが 18度 上がる（先が上がる向き＝左回り）。バケットは、うでより少しあとから 15度 かたむく */
+      "@keyframes kuruma-loader-lift { 0% { transform: rotate(0deg); } 35%, 60% { transform: rotate(-18deg); }" +
+      " 100% { transform: rotate(0deg); } }\n" +
+      "@keyframes kuruma-loader-curl { 0%, 15% { transform: rotate(0deg); } 40%, 60% { transform: rotate(-15deg); }" +
+      " 100% { transform: rotate(0deg); } }\n",
+    // 「ゴゴゴ・ザクッ・ゴトン」：重いエンジンの音（rumble 80Hz、1秒に 14回のゆれ）に、すくう「ザクッ」と、
+    //   もちあげ終わりの小さな「ゴトン」。クレーンしゃの「ウィーン」のような、上がっていく音は使わない。0.75秒
+    //   測った結果（0.54・0.14・0.2 のとき）：ピーク 1.111、250Hz より下を削ったもの RMS 0.904、3回連打 0.370。
+    //   ピークが 1.1 をこえたので、全体を 0.95倍にした。測った結果：ピーク 1.056、RMS 0.959、削ったもの RMS 0.858
+    sound: function () {
+      var S = Kuruma.sound;
+      if (!S) return;
+      var ctx = S.beginSound(0.75, false);
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      S.rumble(ctx, 80, 78, t, 0.75, 0.513, 900, 14, 0.2, 0.7);   // ゴゴゴ（重いエンジン）
+      S.noise(ctx, t + 0.1, 0.12, 0.133, 900, 0.3);                // ザクッ（すくう）
+      S.tone(ctx, "sine", 110, 80, t + 0.55, 0.12, 0.19);          // ゴトン（もちあげ終わり）
+    }
+  });
+
+  // =====================================================
+  // 20. フォークリフト（forklift、横 260）図鑑のアップデート2
+  //    小さな車体。うしろ（左）は、平らな上面の まるい角の箱（おもり。頭のように丸く見えないよう、
+  //    車体とひと続きの形）。まんなかに、柱で支えた屋根と、いすの背もたれ・ハンドル（人は描かない）。
+  //    前（右）に、たてのマスト（2本の柱が重なって見える）と、L字のつめ。つめの上に木のパレットを1枚（荷物の箱はなし）。
+  //    前のタイヤが大きく（半径 24）、うしろのタイヤが小さい（半径 19）。水色1色（屋根・柱・マスト・つめは灰）
+  //    会社名・マーク・黄と黒のしま・屋根の上の回転灯は描かない
+  //    仕事（0.7秒）：つめとパレット（fork の部品ぜんぶ）が 60px 上がって、下がる。マストは動かない
+  //    いちばん動いたとき：うしろの板の上のはし y 140 − 60 ＝ 80（マストの上のはし y 52 より下）、
+  //      つめ y 196〜203 → 136〜143、パレットの上のはし y 185 → 125、右のはし x 252（線をふくめて 253.5。枠は x 255 まで）。
+  //      つめはマストの前（x 210 より右）を上下するだけ。どれも枠の中
+  // =====================================================
+  // 本体：おもり（x 15〜86、上面 y 122 で平ら、角はまるい）→ いすの床（y 150）→ 前のカバー（y 134）のひと続きの形
+  var FORKLIFT_BODY = "M 15 183 L 15 132 Q 15 122 25 122 L 76 122 Q 86 122 86 132 L 86 142 Q 86 150 94 150 " +
+    "L 150 150 Q 158 150 161 144 L 166 138 Q 169 134 176 134 L 186 134 Q 196 134 196 144 L 196 183 " +
+    "Q 196 195 184 195 L 27 195 Q 15 195 15 183 Z";
+  add({
+    id: "forklift",
+    name: "ふぉーくりふと",
+    color: "sky",
+    width: 260,
+    tip: { x: 120, y: 54 },   // 屋根の上（横幅の 46%）
+    workTime: 700,
+    draw: function () {
+      var s = SKY;
+      return shadow(133, 122) +
+        // 屋根・柱2本・いすの背もたれ・ハンドル。本体より先に描いて、柱・いすの下のはしを本体でかくす
+        part("cab",
+          '<path d="M 81 64 L 81 138" fill="none" stroke-width="12"/>' +
+          '<path d="M 81 64 L 81 138" fill="none" stroke="#8a8f96" stroke-width="6"/>' +
+          '<path d="M 180 64 L 188 142" fill="none" stroke-width="12"/>' +
+          '<path d="M 180 64 L 188 142" fill="none" stroke="#8a8f96" stroke-width="6"/>' +
+          // いす（背もたれと、すわるところ。こい灰）
+          '<rect x="98" y="96" width="12" height="56" rx="6" fill="#6e737a"/>' +
+          '<rect x="98" y="136" width="40" height="14" rx="5" fill="#6e737a"/>' +
+          // ハンドル（細い柱と、ななめの輪）
+          '<path d="M 154 150 L 146 120" fill="none" stroke-width="8"/>' +
+          '<path d="M 154 150 L 146 120" fill="none" stroke="#6e737a" stroke-width="4"/>' +
+          '<ellipse cx="144" cy="116" rx="11" ry="4" transform="rotate(-28 144 116)" fill="#8a8f96" stroke-width="2.5"/>' +
+          // 屋根
+          '<rect x="70" y="58" width="120" height="9" rx="4.5" fill="#6e737a"/>' +
+          '<path d="M 77 62 L 183 62" fill="none" stroke="#8a8f96" stroke-width="2.5"/>') +
+        part("body",
+          '<path d="' + FORKLIFT_BODY + '" fill="' + s.main + '" stroke="none"/>' +
+          '<rect x="23" y="126" width="56" height="4" rx="2" fill="' + s.light + '" stroke="none"/>' +
+          '<rect x="22" y="185" width="168" height="5" rx="2.5" fill="' + s.shade + '" stroke="none"/>' +
+          '<path d="' + FORKLIFT_BODY + '" fill="none"/>') +
+        // マスト（動かない。2本の柱が重なって見える形。まんなかに線1本）
+        part("mast",
+          '<rect x="196" y="52" width="14" height="148" rx="4" fill="#8a8f96" stroke="none"/>' +
+          '<rect x="198.5" y="57" width="3" height="138" rx="1.5" fill="#aab0b6" stroke="none"/>' +
+          '<rect x="205" y="57" width="3.5" height="138" rx="1.5" fill="#6e737a" stroke="none"/>' +
+          '<rect x="196" y="52" width="14" height="148" rx="4" fill="none"/>' +
+          '<path d="M 203 56 L 203 196" fill="none" stroke-width="2"/>') +
+        // つめ（L字）とパレット。.fork-lift ごと、まっすぐ上下に動く（回さないので、中心の決めごとは要らない）
+        part("fork",
+          '<g class="fork-lift">' +
+            '<rect x="210" y="140" width="8" height="60" rx="3" fill="#6e737a"/>' +
+            '<rect x="210" y="196" width="42" height="7" rx="3.5" fill="#8a8f96"/>' +
+            // パレット：上の板と、あいだの3つの足（足のあいだの すき間が2つ）
+            '<rect x="217" y="191" width="7" height="5" fill="#a97c4f" stroke-width="2"/>' +
+            '<rect x="231" y="191" width="7" height="5" fill="#a97c4f" stroke-width="2"/>' +
+            '<rect x="245" y="191" width="7" height="5" fill="#a97c4f" stroke-width="2"/>' +
+            '<rect x="216" y="185" width="36" height="6" rx="2" fill="#c89a6a" stroke-width="2"/>' +
+          '</g>') +
+        lights(188, 146, 12, 150) +
+        tire(65, 19) + tire(180, 24);
+    },
+    css:
+      ".kuruma-car .fork-lift { transform-origin: 0 0; }\n" +
+      ".kc-forklift.kw-on .fork-lift { animation: kuruma-forklift-lift 0.7s ease-in-out; }\n" +
+      "@keyframes kuruma-forklift-lift { 0% { transform: translateY(0); } 35%, 60% { transform: translateY(-60px); }" +
+      " 100% { transform: translateY(0); } }\n",
+    // 「ウィーン・コトン」：電気のモーターの音（triangle 200 → 300 → 200Hz、1500Hz でやわらかく）に、
+    //   低い「からだ」の音（sine 110Hz、小さめ）と、上がりきったところの小さな「コトン」。0.7秒
+    //   クレーンしゃ（180→260Hz の上がるだけ）、パトカー（450〜850Hz）と聞き分けられるかは、聞きくらべで確かめる。
+    //   測った結果（0.27・0.09・0.07・0.12・0.05 のとき）：ピーク 0.959、250Hz より下を削ったもの RMS 1.492（大きすぎ）。
+    //   聞きくらべのページの提案（×0.636）にしたがい、全体を 0.64倍にした。測った結果：ピーク 0.616、RMS 0.651、削ったもの RMS 0.961
+    sound: function () {
+      var S = Kuruma.sound;
+      if (!S) return;
+      var ctx = S.beginSound(0.7, false);
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      S.glide(ctx, "triangle", [200, 300, 200], t, 0.65, 0.173, 1500, 0.05, 0.7);  // ウィーン（モーター）
+      S.glide(ctx, "sine", [200, 300, 200], t, 0.65, 0.058, 0, 0.05, 0.7);         // ウィーン（まるみ）
+      S.tone(ctx, "sine", 110, 105, t, 0.65, 0.045, 0, 0.7);                        // からだの低い音（小さめ）
+      S.tone(ctx, "sine", 140, 100, t + 0.35, 0.12, 0.077);                         // コトン
+      S.noise(ctx, t + 0.35, 0.05, 0.032, 1200);                                    // コトン（スマホでも聞こえるように、ごく小さく）
+    }
+  });
+
+  // =====================================================
+  // 21. ウイングトラック（wingtruck、横 310）図鑑のアップデート2
+  //    右にピンクの運転席、うしろに大きな四角い荷物の箱。箱の横の板（パネル）が、上のはしをちょうつがいにして、
+  //    つばさのように上へひらき、中のうすい灰色と茶色の荷物の箱3つが見える。ピンク1色。タイヤ3つ
+  //    会社名・電話番号・ロゴ・動物のマーク・色の帯は描かない（文字もなし）
+  //    仕事（0.7秒）：横から見た「ひらき方」を、2つの板の縦の大きさで表す。
+  //      ① 横の板（.panel-down。上のはし y 74 が (0, 0)）が 縦 1 → 0（0〜45%。中の荷物が見えてくる）
+  //      ② 屋根の上の ひらいた板（.panel-up。下のはし y 74 が (0, 0)）が 縦 0 → 1（45〜60%）
+  //      ③ そのまま（60〜70%）
+  //      ④ ②と①を逆に たどって戻る（70〜85% で .panel-up が 1 → 0、85〜100% で .panel-down が 0 → 1）
+  //    .panel-up は、ふだんは scale(1, 0)・opacity: 0（閉じているときに線が残らない）。
+  //      kw-on のあいだの 45〜85% だけ opacity 1
+  //    いちばん動いたとき：ひらいた板は y 74 − 46 ＝ 28 〜 74（上のはし y 28、線をふくめて 26.5）、x 22〜216。枠の中
+  // =====================================================
+  add({
+    id: "wingtruck",
+    name: "ういんぐとらっく",
+    color: "pink",
+    width: 310,
+    // 箱の上（横幅の 37%）。ひらいた板が出る場所だが、指マークは仕事の前に消えるので、ふだんの箱の上に置く
+    tip: { x: 115, y: 66 },
+    workTime: 700,
+    draw: function () {
+      var p = PINK;
+      // 荷物の箱3つ（x 30・90・150。それぞれ 横 52 × 縦 38。ふた用の小さなテープの帯つき。文字・マークなし）
+      var boxes = "";
+      for (var i = 0; i < 3; i++) {
+        var bx = 30 + i * 60;
+        boxes += '<rect x="' + bx + '" y="122" width="52" height="38" rx="3" fill="#c89a6a" stroke-width="2.5"/>' +
+          '<rect x="' + (bx + 4) + '" y="125" width="44" height="3" rx="1.5" fill="#dcb386" stroke="none"/>' +
+          '<rect x="' + (bx + 22) + '" y="122" width="8" height="12" fill="#a87a4a" stroke-width="2"/>';
+      }
+      return shadow(160, 148) +
+        chassis(15, 297) +
+        // 荷物の箱：外がわ（ピンク）→ 中（うすい灰）→ 中の荷物。ふだんは、横の板（panel-down）がふさいでいる
+        part("cargo",
+          '<rect x="18" y="70" width="202" height="98" rx="8" fill="' + p.main + '" stroke="none"/>' +
+          '<rect x="24" y="162" width="190" height="5" rx="2.5" fill="' + p.shade + '" stroke="none"/>' +
+          '<rect x="18" y="70" width="202" height="98" rx="8" fill="none"/>' +
+          '<rect x="22" y="74" width="194" height="86" rx="3" fill="#dfe3e8" stroke-width="2"/>' +
+          '<rect x="24" y="76" width="190" height="8" fill="#c6ccd3" stroke="none"/>' +
+          '<rect x="24" y="76" width="9" height="82" fill="#cdd3da" stroke="none"/>' +
+          boxes) +
+        // 横の板と、ひらいた板。(0, 74) が (0, 0)。.panel-down は上のはし、.panel-up は下のはしが (0, 0)
+        part("panel",
+          '<g transform="translate(0 74)">' +
+            // 横の板（y 0〜86）：ピンク、明るい横線1本、たての つなぎ目3本
+            '<g class="panel-down">' +
+              '<rect x="22" y="0" width="194" height="86" rx="4" fill="' + p.main + '"/>' +
+              '<rect x="28" y="76" width="182" height="5" rx="2.5" fill="' + p.shade + '" stroke="none"/>' +
+              '<path d="M 30 14 L 208 14" fill="none" stroke="' + p.light + '" stroke-width="4"/>' +
+              '<g fill="none" stroke-width="2">' +
+                '<path d="M 70.5 24 L 70.5 70"/><path d="M 119 24 L 119 70"/><path d="M 167.5 24 L 167.5 70"/>' +
+              '</g>' +
+            '</g>' +
+            // ひらいた板（y −46〜0）：少し明るいピンク。上のほうが少しせまい（遠くに見える形）
+            '<g class="panel-up">' +
+              '<path d="M 22 0 L 34 -46 L 204 -46 L 216 0 Z" fill="' + p.light + '"/>' +
+              '<path d="M 44 -38 L 194 -38" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.5"/>' +
+              '<path d="M 28 -6 L 210 -6" fill="none" stroke="' + p.main + '" stroke-width="6"/>' +
+            '</g>' +
+          '</g>' +
+          // ちょうつがい（2つ。動かない）
+          '<rect x="40" y="68" width="16" height="9" rx="3" fill="#c8ccd0" stroke-width="2.5"/>' +
+          '<rect x="182" y="68" width="16" height="9" rx="3" fill="#c8ccd0" stroke-width="2.5"/>') +
+        cab(225, 300, 95, 195, p) +
+        lights(295, 161, 20, 170) +
+        tire(60) + tire(140) + tire(250);
+    },
+    css:
+      ".kuruma-car .panel-down, .kuruma-car .panel-up { transform-origin: 0 0; }\n" +
+      /* ひらいた板は、ふだんは見えない・大きさ 0（閉じているとき、線が残らない） */
+      ".kuruma-car .panel-up { transform: scale(1, 0); opacity: 0; }\n" +
+      ".kc-wingtruck.kw-on .panel-down { animation: kuruma-wingtruck-down 0.7s ease-in-out; }\n" +
+      ".kc-wingtruck.kw-on .panel-up { animation: kuruma-wingtruck-up 0.7s ease-in-out; }\n" +
+      "@keyframes kuruma-wingtruck-down { 0% { transform: scale(1, 1); } 45%, 85% { transform: scale(1, 0); }" +
+      " 100% { transform: scale(1, 1); } }\n" +
+      /* 45% で見え始め、85% で見えなくなる（そのあいだの 60〜70% でいちばん大きい） */
+      "@keyframes kuruma-wingtruck-up { 0%, 44% { transform: scale(1, 0); opacity: 0; }" +
+      " 45% { transform: scale(1, 0); opacity: 1; } 60%, 70% { transform: scale(1, 1); opacity: 1; }" +
+      " 85% { transform: scale(1, 0); opacity: 1; } 85.1%, 100% { transform: scale(1, 0); opacity: 0; } }\n",
+    // 「ウィーン・パタン」：トラックの低い音（sawtooth 95Hz、800Hz でやわらかく）に、小さなモーターの音（triangle 140 → 170Hz）と、
+    //   閉じる「パタン」（0.55秒に 低い sine ＋ 500Hz のごく小さな にごり）。タクシーの「パタン」と近いので、
+    //   聞きくらべで確かめる（近すぎたら高さを変える）。0.7秒
+    //   測った結果（0.44・0.1・0.13・0.1 のとき）：ピーク 1.057、250Hz より下を削ったもの RMS 0.961、3回連打 0.513。目安の中なので、そのまま
+    sound: function () {
+      var S = Kuruma.sound;
+      if (!S) return;
+      var ctx = S.beginSound(0.7, false);
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      S.tone(ctx, "sawtooth", 95, 90, t, 0.7, 0.44, 800, 0.7);       // トラックの低い音
+      S.tone(ctx, "triangle", 140, 170, t + 0.05, 0.45, 0.1, 1200);   // ウィーン（小さなモーター）
+      S.tone(ctx, "sine", 120, 85, t + 0.55, 0.12, 0.13);             // パ（低くまるい）
+      S.noise(ctx, t + 0.55, 0.08, 0.1, 500);                         // タン（小さく まるく）
+    }
+  });
+
+  // =====================================================
+  // 22. カーキャリアー（carrier、横 310）図鑑のアップデート2
+  //    右にきみどりの運転席、うしろに2階建ての灰色の骨組みの台。上の台に小さなくるま2台、下の台に1台。
+  //    上の台のうしろのはしは、下へかたむく坂の板。のせたくるまは、このゲーム集だけの まるい形
+  //    （実在の車種に似せない。文字・ロゴ・ナンバーなし）。のせたくるまの小さな車輪は tire の部品にしない（ただの circle）
+  //    仕事（0.7秒）：坂の板が、付け根 (70, 96) を中心に、先（左）が下がる向きに 25度 かたむいて戻る
+  //    いちばん動いたとき：板（左のはし x 18、横 52 × 縦 8）は、付け根から見て (−52, ±4) が 25度（左回り）回る。
+  //      x' ＝ x × cos25° ＋ y × sin25°、y' ＝ −x × sin25° ＋ y × cos25°
+  //      先の中心 (−52, 0) → (−47.1, 22.0) → (22.9, 118.0)、先の下の角 (−52, 4) → (24.6, 121.6)（線をふくめて y 123 くらい）
+  //      下の台の くるま（x 40〜100、上のはし y 122 だが、屋根は x 70 のあたり。x 40 のあたりのふちは y 133 より下）とは、
+  //      板の下のふち（x 40 で y 114 くらい）が重ならない。枠の中（x 5〜305、y 5〜215）
+  // =====================================================
+  // のせる小さなくるま（まるい箱に まるい屋根。横 60 × 縦 28。左上が (0, 0)）。車輪は半径 7 の ただの circle
+  function carrierMiniCar(x, y, color) {
+    return '<g transform="translate(' + x + ' ' + y + ')">' +
+      '<path d="M 3 24 L 3 17 Q 3 11 9 11 L 14 11 Q 18 0 30 0 L 38 0 Q 46 0 50 11 L 54 11 Q 58 11 58 17 L 58 24 ' +
+        'Q 58 27 55 27 L 6 27 Q 3 27 3 24 Z" fill="' + color + '" stroke-width="2.5"/>' +
+      '<path d="M 18 11 Q 21 4 30 4 L 38 4 Q 43 4 46 11 Z" fill="#bfe4f5" stroke-width="2"/>' +
+      '<circle cx="15" cy="21" r="7" fill="#4a4a4a" stroke-width="2"/><circle cx="15" cy="21" r="3" fill="#c8ccd0" stroke="none"/>' +
+      '<circle cx="45" cy="21" r="7" fill="#4a4a4a" stroke-width="2"/><circle cx="45" cy="21" r="3" fill="#c8ccd0" stroke="none"/>' +
+      '</g>';
+  }
+  add({
+    id: "carrier",
+    name: "かーきゃりあー",
+    color: "lime",
+    width: 310,
+    tip: { x: 150, y: 60 },   // 上の台の2台のくるまのあいだの上（横幅の 48%。上の台は動かない）
+    workTime: 700,
+    draw: function () {
+      var p = LIME;
+      return shadow(160, 148) +
+        chassis(15, 297) +
+        // 下の台・柱3本・下のくるま（動かない）
+        part("body",
+          '<rect x="60" y="159" width="20" height="9" fill="#6e737a"/><rect x="170" y="159" width="20" height="9" fill="#6e737a"/>' +
+          '<rect x="26" y="100" width="8" height="52" rx="2" fill="#8a8f96"/>' +
+          '<rect x="116" y="100" width="8" height="52" rx="2" fill="#8a8f96"/>' +
+          '<rect x="211" y="100" width="8" height="52" rx="2" fill="#8a8f96"/>' +
+          carrierMiniCar(40, 122, "#ffd0b0") +
+          '<rect x="18" y="150" width="208" height="10" rx="3" fill="#8a8f96"/>' +
+          '<path d="M 24 153 L 220 153" fill="none" stroke="#aab0b6" stroke-width="2.5"/>') +
+        // 上の台と、のせた くるま2台
+        part("deck",
+          '<rect x="70" y="92" width="156" height="8" rx="3" fill="#8a8f96"/>' +
+          '<path d="M 76 95 L 220 95" fill="none" stroke="#aab0b6" stroke-width="2.5"/>' +
+          carrierMiniCar(80, 64, "#fff0b3") + carrierMiniCar(156, 64, "#bfeccf")) +
+        // 坂の板：付け根 (70, 96) が (0, 0)。板は付け根から左へ 52（x 18〜70）、厚さ 8
+        part("ramp",
+          '<g transform="translate(70 96)"><g class="ramp-tilt">' +
+            '<rect x="-52" y="-4" width="52" height="8" rx="3" fill="#8a8f96"/>' +
+            '<path d="M -40 -3 L -40 3 M -28 -3 L -28 3 M -16 -3 L -16 3" fill="none" stroke="#6e737a" stroke-width="2"/>' +
+            '<circle r="4" fill="#c8ccd0" stroke-width="2"/>' +
+          '</g></g>') +
+        cab(230, 302, 95, 195, p) +
+        lights(297, 161, 20, 170) +
+        tire(60) + tire(140) + tire(255);
+    },
+    css:
+      ".kuruma-car .ramp-tilt { transform-origin: 0 0; }\n" +
+      ".kc-carrier.kw-on .ramp-tilt { animation: kuruma-carrier-ramp 0.7s ease-in-out; }\n" +
+      "@keyframes kuruma-carrier-ramp { 0% { transform: rotate(0deg); } 35%, 60% { transform: rotate(-25deg); }" +
+      " 100% { transform: rotate(0deg); } }\n",
+    // 「ウゥーン・ガタン」：下がっていく機械の音（sawtooth 130 → 95Hz、900Hz でやわらかく）に、
+    //   おりきったところで「ガタン」（noise 700Hz ＋ 低い sine）。つぶの音は入れない（レッカーしゃの「カラカラ」と聞き分ける）。0.7秒
+    //   測った結果（0.45・0.12・0.15 のとき）：ピーク 0.911、250Hz より下を削ったもの RMS 1.033、3回連打 0.497。目安の中なので、そのまま
+    sound: function () {
+      var S = Kuruma.sound;
+      if (!S) return;
+      var ctx = S.beginSound(0.7, false);
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      S.tone(ctx, "sawtooth", 130, 95, t, 0.6, 0.45, 900, 0.7);    // ウゥーン
+      S.noise(ctx, t + 0.5, 0.07, 0.12, 700);                       // ガ
+      S.tone(ctx, "sine", 110, 80, t + 0.5, 0.12, 0.15);            // タン
+    }
+  });
+
+  // =====================================================
+  // 23. ゆうびんしゃ（mail、横 280）図鑑のアップデート2
+  //    屋根の平らな箱型の小さなくるま（バン）。前は ななめの窓と短いボンネット。横に すべってひらくドア。
+  //    中に白いふうとう（うすい茶の V のふただけ）。やさしい赤1色。
+  //    〒・文字・鳥やラッパのマーク・白い帯・切手は描かない。窓の中は空っぽ（人・影なし）
+  //    仕事（0.7秒）：ドア（.door-slide）が左へ 54px すべって ひらき（0〜35%）、ふうとう（.letter-hop）が 18px 上がって戻り
+  //      （35〜65%）、ドアが戻る（65〜100%）。描く順は 車体 → 窓 → ふうとう → ドア
+  //    いちばん動いたとき：ドアは x 110〜170 → 56〜116（車体 x 15〜262 の中）、ふうとうは y 120〜140 → 102〜122（あなの中）。枠の中
+  // =====================================================
+  var MAIL_BODY = "M 15 185 L 15 82 Q 15 72 25 72 L 188 72 Q 194 72 198 77 L 246 128 Q 252 130 258 131 " +
+    "Q 262 134 262 142 L 262 185 Q 262 195 252 195 L 25 195 Q 15 195 15 185 Z";
+  // ふうとう1つ（左上 (x, y)、横 w × 縦 h。うすい茶の V のふただけ。切手・文字・赤い線なし）
+  function mailLetter(x, y, w, h) {
+    return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" fill="#ffffff" stroke-width="2"/>' +
+      '<path d="M ' + x + ' ' + y + ' L ' + (x + w / 2) + ' ' + (y + h * 0.6) + ' L ' + (x + w) + ' ' + y +
+      '" fill="none" stroke="#b8946a" stroke-width="2"/>';
+  }
+  add({
+    id: "mail",
+    name: "ゆうびんしゃ",
+    color: "red",
+    width: 280,
+    tip: { x: 110, y: 68 },   // 屋根の上（横幅の 39%）
+    workTime: 700,
+    draw: function () {
+      var r = SOFT_RED;
+      return shadow(140, 128) +
+        part("body",
+          '<path d="' + MAIL_BODY + '" fill="' + r.main + '" stroke="none"/>' +
+          '<path d="M 24 77 L 184 77" fill="none" stroke="' + r.light + '" stroke-width="4"/>' +
+          '<rect x="22" y="184" width="232" height="6" rx="3" fill="' + r.shade + '" stroke="none"/>' +
+          '<path d="' + MAIL_BODY + '" fill="none"/>' +
+          // ドアのうしろ（車体の中）：うすい灰の中と、たな、たなに重ねたふうとう
+          '<rect x="110" y="90" width="60" height="95" rx="3" fill="#dfe3e8" stroke-width="2"/>' +
+          '<path d="M 112 142 L 168 142" fill="none" stroke="#b8bec6" stroke-width="2"/>' +
+          mailLetter(116, 150, 24, 18) + mailLetter(142, 150, 24, 18) +
+          // 運転席の横のドアの取っ手と、前のバンパー
+          '<rect x="186" y="150" width="12" height="4" rx="2" fill="' + LINE + '" stroke="none"/>' +
+          '<rect x="252" y="178" width="14" height="11" rx="4" fill="#c8ccd0"/>') +
+        // 前の ななめの窓と、運転席の横の窓（ひと続き。中は空っぽ）
+        part("window",
+          '<path d="M 178 86 L 192 86 Q 196 86 199 90 L 233 124 Q 236 128 231 128 L 178 128 Z" fill="#bfe4f5" stroke-width="2.5"/>' +
+          '<g fill="none" stroke="#ffffff" stroke-width="4" opacity="0.7">' +
+            '<path d="M 186 122 L 194 98"/><path d="M 198 122 L 206 100"/>' +
+          '</g>') +
+        // ふうとう（ドアのあなの中。閉じているときは、ドアでかくれる）
+        part("letter",
+          '<g class="letter-hop">' + mailLetter(125, 120, 30, 20) + '</g>') +
+        // すべるドア（取っ手だけ。窓なし）。x 110〜170、y 90〜185
+        part("door",
+          '<g class="door-slide">' +
+            '<rect x="110" y="90" width="60" height="95" rx="5" fill="' + r.main + '"/>' +
+            '<rect x="116" y="95" width="48" height="4" rx="2" fill="' + r.light + '" stroke="none"/>' +
+            '<rect x="116" y="174" width="48" height="6" rx="3" fill="' + r.shade + '" stroke="none"/>' +
+            '<rect x="158" y="128" width="5" height="18" rx="2.5" fill="' + LINE + '" stroke="none"/>' +
+          '</g>') +
+        lights(256, 152, 12, 150) +
+        tire(65, 23) + tire(215, 23);
+    },
+    css:
+      ".kuruma-car .door-slide, .kuruma-car .letter-hop { transform-origin: 0 0; }\n" +
+      ".kc-mail.kw-on .door-slide { animation: kuruma-mail-door 0.7s ease-in-out; }\n" +
+      ".kc-mail.kw-on .letter-hop { animation: kuruma-mail-letter 0.7s ease-in-out; }\n" +
+      "@keyframes kuruma-mail-door { 0% { transform: translateX(0); } 35%, 65% { transform: translateX(-54px); }" +
+      " 100% { transform: translateX(0); } }\n" +
+      "@keyframes kuruma-mail-letter { 0%, 35% { transform: translateY(0); } 50% { transform: translateY(-18px); }" +
+      " 65%, 100% { transform: translateY(0); } }\n",
+    // 「スーッ・ポン」：止まっているエンジンの音（rumble 90Hz、ゆれ浅め）に、ドアがすべる「スーッ」と、
+    //   ふうとうが出る「ポン」（sine 330 → 440Hz）。タンクローリーの「ぽこっ」（3回）と聞き分ける。0.7秒
+    //   測った結果（0.46・0.1・0.16 のとき）：ピーク 1.114、250Hz より下を削ったもの RMS 0.971、3回連打 0.390。
+    //   ピークが 1.1 をこえたので、全体を 0.95倍にした。測った結果：ピーク 1.058、RMS 0.906、削ったもの RMS 0.923
+    sound: function () {
+      var S = Kuruma.sound;
+      if (!S) return;
+      var ctx = S.beginSound(0.7, false);
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      S.rumble(ctx, 90, 88, t, 0.7, 0.437, 800, 5, 0.1, 0.7);   // 止まっているエンジン
+      S.noise(ctx, t + 0.02, 0.25, 0.095, 1200, 0.6);            // スーッ
+      S.tone(ctx, "sine", 330, 440, t + 0.35, 0.12, 0.152);      // ポン
+    }
+  });
+
+  // =====================================================
+  // 24. しろバイ（shirobai、横 260）図鑑のアップデート2
+  //    白いオートバイ。前に風よけと白いカバー、まんなかにタンクといす（こい灰。運転する人は描かない）、
+  //    うしろに白い荷物入れ。うしろの小さな柱の上に、青い小さな まるいランプ。タイヤ2つ（自動車より細く、ホイールが大きい）
+  //    警察の印・文字・番号・赤い回転灯・サイレンのスピーカー・運転する人は描かない。点滅しない
+  //    仕事（lamp: true、workTime 0）：青いランプ（.lit）と光の輪（glow）が やさしく光るだけ（形は動かない）。
+  //      lampPart・glowPart は赤いので使わず、しろバイの中で描く
+  //    範囲：左は荷物入れ x 25（線をふくめて 23.5）とうしろのタイヤ x 34、右は前のどろよけ x 236、
+  //      上は風よけ y 68、ランプの光の輪は x 23〜67・y 83〜127。動かないので、どれも枠の中
+  // =====================================================
+  // タイヤ1つ（半径 26。下のはし y 215）。回る中心 (0, 0)、.spin
+  function bikeTire(cx) {
+    return part("tire",
+      '<g transform="translate(' + cx + ' 189)"><g class="spin">' +
+        '<circle r="26" fill="#4a4a4a"/>' +
+        '<circle r="17" fill="#c8ccd0" stroke-width="2.5"/>' +
+        '<circle r="5" fill="#8a8a8a" stroke="none"/>' +
+        '<g fill="#8a8a8a" stroke="none">' +
+          '<circle cx="0" cy="-11" r="2.2"/><circle cx="9.5" cy="5.5" r="2.2"/><circle cx="-9.5" cy="5.5" r="2.2"/>' +
+        '</g>' +
+      '</g></g>');
+  }
+  // どろよけ（タイヤの上の弓形。タイヤの中心 (cx, 189)、外がわ半径 33・内がわ半径 28）
+  function bikeFender(cx) {
+    return '<path d="M ' + (cx - 31) + ' 177.7 A 33 33 0 0 1 ' + (cx + 31) + ' 177.7 L ' + (cx + 26.3) + ' 179.4 ' +
+      'A 28 28 0 0 0 ' + (cx - 26.3) + ' 179.4 Z" fill="#ffffff" stroke-width="2.5"/>';
+  }
+  add({
+    id: "shirobai",
+    name: "しろばい",
+    color: "white",
+    width: 260,
+    tip: { x: 95, y: 114 },   // いすの上（横幅の 37%）。ランプ（x 38〜52）にかからない
+    workTime: 0,
+    lamp: true,
+    draw: function () {
+      return shadow(130, 112) +
+        // タイヤ（うしろ → 前の順）。ほかの部品は、タイヤの上に重ねる
+        bikeTire(60) + bikeTire(205) +
+        part("body",
+          // 前の柱（フォーク）とうしろのうで（灰。太く）。タイヤのまんなかにつながる
+          '<path d="M 195 140 L 205 189" fill="none" stroke-width="12"/>' +
+          '<path d="M 195 140 L 205 189" fill="none" stroke="#8a8f96" stroke-width="6"/>' +
+          '<path d="M 115 165 L 60 189" fill="none" stroke-width="12"/>' +
+          '<path d="M 115 165 L 60 189" fill="none" stroke="#8a8f96" stroke-width="6"/>' +
+          // マフラー（銀）とエンジン（灰）
+          '<rect x="60" y="175" width="70" height="8" rx="4" fill="#c8ccd0"/>' +
+          '<rect x="105" y="150" width="45" height="28" rx="8" fill="#8a8f96"/>' +
+          // ランプの柱（荷物入れのうしろにかくれる）と、いす
+          '<rect x="42" y="112" width="6" height="16" fill="#8a8f96" stroke-width="2.5"/>' +
+          '<rect x="60" y="118" width="60" height="12" rx="6" fill="#6e737a"/>' +
+          // うしろの荷物入れ
+          '<rect x="25" y="125" width="55" height="40" rx="8" fill="#ffffff"/>' +
+          '<rect x="31" y="156" width="43" height="5" rx="2.5" fill="#e3e8ee" stroke="none"/>' +
+          // タンク
+          '<rect x="105" y="120" width="55" height="25" rx="10" fill="#ffffff"/>' +
+          '<rect x="112" y="138" width="42" height="4" rx="2" fill="#e3e8ee" stroke="none"/>' +
+          // どろよけ（2つ）
+          bikeFender(60) + bikeFender(205) +
+          // ハンドル（灰の短い線）
+          '<path d="M 172 105 L 185 112" fill="none" stroke-width="9"/>' +
+          '<path d="M 172 105 L 185 112" fill="none" stroke="#8a8f96" stroke-width="4"/>' +
+          // 前のカバー（白）
+          '<path d="M 160 160 L 160 118 Q 160 100 180 100 L 205 100 Q 215 104 215 122 L 215 160 Z" fill="#ffffff"/>' +
+          '<rect x="165" y="150" width="45" height="5" rx="2.5" fill="#e3e8ee" stroke="none"/>') +
+        // 風よけ（前の高いガラス。ななめ）
+        part("window",
+          '<path d="M 176 104 Q 178 86 190 72 Q 195 68 200 71 Q 212 82 210 104 Z" fill="#bfe4f5" stroke-width="2.5"/>' +
+          '<path d="M 187 98 L 195 80" fill="none" stroke="#ffffff" stroke-width="4" opacity="0.7"/>') +
+        // 光の輪（青いランプのまわり。ふだんは見えず、仕事のあいだだけ やさしく出る）
+        '<g data-part="glow">' +
+          '<circle cx="45" cy="105" r="22" fill="#cfe6ff" opacity="0.25"/>' +
+          '<circle cx="45" cy="105" r="14" fill="#a9d2ff" opacity="0.35"/>' +
+        '</g>' +
+        // 青い小さなランプ（.lit が光る）
+        part("lamp",
+          '<circle cx="45" cy="105" r="7" fill="#5aa0e6"/>' +
+          '<circle class="lit" cx="45" cy="105" r="5" fill="#d6ebff" stroke="none"/>' +
+          '<ellipse cx="45" cy="102" rx="4" ry="2" fill="#ffffff" opacity="0.5" stroke="none"/>') +
+        lights(211, 128, 20, 140);
+    },
+    // 「ブン・ブーン」：オートバイのエンジンを2回ふかす音（sawtooth [150, 220, 160]Hz 0.3秒 と [150, 240, 170]Hz 0.42秒、
+    //   1200Hz でやわらかく）。サイレンは鳴らさない。スポーツカーの「ブォン！」（1回）と、2回に分かれることで聞き分ける。0.75秒
+    //   測った結果（0.3・0.3 のとき）：ピーク 0.600、250Hz より下を削ったもの RMS 0.860、3回連打 0.322。目安の中なので、そのまま
+    sound: function () {
+      var S = Kuruma.sound;
+      if (!S) return;
+      var ctx = S.beginSound(0.75, false);
+      if (!ctx) return;
+      var t = ctx.currentTime;
+      S.glide(ctx, "sawtooth", [150, 220, 160], t, 0.3, 0.3, 1200, 0.03, 0.6);          // ブン
+      S.glide(ctx, "sawtooth", [150, 240, 170], t + 0.32, 0.42, 0.3, 1200, 0.03, 0.6);   // ブーン
     }
   });
 

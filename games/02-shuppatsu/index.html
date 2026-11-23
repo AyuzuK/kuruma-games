@@ -371,11 +371,12 @@
       var K = window.Kuruma;
 
       // ===== 設定（数字を変えると動きが変わります） =====
-      // 出てくるくるま18台（図鑑が増えても、このゲームが勝手に変わらないように、ここにはっきり書く）。
-      // 順番は、袋に入れてまぜる（18台が1回ずつ出たら、まぜ直す）。同じくるまは続かず、
+      // 出てくるくるま24台（図鑑が増えても、このゲームが勝手に変わらないように、ここにはっきり書く）。
+      // 順番は、袋に入れてまぜる（24台が1回ずつ出たら、まぜ直す）。同じくるまは続かず、
       // となり合うくるまの主な色（図鑑の color）も、できるだけ かぶらない
       var IDS = ["mixer", "dump", "bulldozer", "garbage", "shovel", "fire", "ambulance", "crane", "police",
-                 "grader", "tanker", "tractor", "taxi", "tow", "sports", "roller", "bus", "doubledecker"];
+                 "grader", "tanker", "tractor", "taxi", "tow", "sports", "roller", "bus", "doubledecker",
+                 "loader", "forklift", "wingtruck", "carrier", "mail", "shirobai"];
       var TAPS_TO_END = 6;     // だいたい何回さわると右はしに着くか
       var MIN_STEP = 40;       // 1歩の最低の長さ（px。せまい画面では、6回より少なく着く）
       var HOME_URL = "../../index.html"; // トップ画面
