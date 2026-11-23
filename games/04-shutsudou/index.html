@@ -988,17 +988,20 @@
       //   くるまの座標（ゆうびんしゃ、横 280 → 枠の中で左に 15 あく。0.6倍）：
       //     場面の x ＝ 14 ＋ (15 ＋ 図鑑の x) × 0.6 ＝ 23 ＋ 0.6 × 図鑑の x、場面の y ＝ 121 ＋ 図鑑の y × 0.6
       //     ドア（図鑑 x 110〜170）→ x 89〜125。ひらいたとき（54 左へ）x 56〜92。ふうとう（図鑑 y 120〜140）→ y 193〜205、
-      //     ぴょんと上がったとき（18 上）y 182〜194。こどもは x 316〜364 なので、くるまと重ならない
+      //     ぴょんと上がったとき（18 上）y 182〜194。こどもは x 316〜364 なので、くるまと重ならない。
+      //     ゆうびんしゃの車体のうしろに足した小さなふうとう（図鑑 x 22〜50・y 112〜132）は、場面の x 36〜53・y 188〜200。
+      //     ドアの動き（x 56〜125）と重ならないので、場面の座標は そのまま
       function drawTegami() {
         var base = sky() + cloud(110, 44, 1.1) + cloud(250, 30, 0.8) + cloud(440, 90, 0.7) + grass(226) + road() +
           roundTree(452, 232, 22);
         // 大きな白い ふうとう（うすい茶の V のふただけ。切手・〒・文字なし）
-        var envelope = '<rect x="-24" y="-46" width="48" height="30" rx="3" fill="#ffffff" ' + LNS + '/>' +
-          '<path d="M -24 -46 L 0 -28 L 24 -46" fill="none" stroke="#b8946a" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>';
+        //   胸の前に持つ大きさ（横 30 × 縦 20）。体（横 28）とほぼ同じ幅で、頭・肩・足は ふうとうの外に見える
+        var envelope = '<rect x="-15" y="-44" width="30" height="20" rx="2.5" fill="#ffffff" ' + LNS + '/>' +
+          '<path d="M -15 -44 L 0 -32 L 15 -44" fill="none" stroke="#b8946a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
         var kid = { shirt: "#f7d548", pants: "#4a90d9", hair: "#6b4a2f" };
         // ふうとうを両手で持った こども。頭の上の ふきだしに、遠くの おうち（屋根に小さなハート）
         var before = bubble(340, 104, 40, 32, 340, 160) + house(340, 122, 1.3) + heart(340, 98, 0.8) +
-          P(340, 246, 1, hBody(kid) + envelope + hArm(-11, -38, -24, -28, "#f7d548") + hArm(11, -38, 24, -28, "#f7d548") + hFace("sad", 0, -1));
+          P(340, 246, 1, hBody(kid) + envelope + hArm(-11, -40, -15, -31, "#f7d548") + hArm(11, -40, 15, -31, "#f7d548") + hFace("sad", 0, -1));
         // ふうとうが なくなって、こどもが 手をふって にっこり。小さなハートが ふわっと
         var after = P(340, 246, 1, hBody(kid) + hArm(-11, -38, -17, -18, "#f7d548") + hArm(11, -40, 25, -60, "#f7d548") + hFace("happy")) +
           heart(376, 176, 1.3);
