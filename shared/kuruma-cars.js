@@ -2230,16 +2230,26 @@
   //    右にきみどりの運転席、うしろに2階建ての灰色の骨組みの台。上の台に小さなくるま2台、下の台に2台（合わせて4台）。
   //    上の台のうしろのはしは、のびながら地面までかたむく坂の板（2段）。のせたくるまは、このゲーム集だけの まるい形
   //    （実在の車種に似せない。文字・ロゴ・ナンバーなし）。のせたくるまの小さな車輪は tire の部品にしない（ただの circle）
-  //    仕事（0.9秒）：坂の板（.ramp-tilt。付け根 (80, 96) が (0, 0)）が、先（左）が下がる向きに 66度 かたむきながら、
-  //      中の板（.ramp-ext）が 56 のび（入れ子のように。テレスコープ）、先が地面にとどく。少し止まって、もどる。
+  //    全体の大きさ：くるま全体（影・車体・台・くるま・坂・運転席・タイヤ）を、地面 y 215 を基準に 0.7倍に縮め、右へ 92 寄せた
+  //      （<g transform="translate(92 215) scale(0.7) translate(0 -215)">。場面の x ＝ 92 ＋ 0.7 × 図鑑の x、
+  //      場面の y ＝ 215 ＋ 0.7 × (図鑑の y − 215)）。うしろに、坂の ための場所があく。以下の座標は、縮める前（図鑑の座標）
+  //    仕事（1.0秒）：坂の板（.ramp-tilt。付け根 (11, 96)＝上の台のうしろのはし が (0, 0)）は、ふだん、まっすぐ下へ
+  //      ぶら下がって、車体のうしろの面に沿っている（x 7〜15、y 96〜213。厚さ 8）。動くときは、うしろ（左）へ持ち上がりながら
+  //      （まっすぐ下から 48度 ＝ 水平から下へ 42度 まで）、中の板（.ramp-ext）が のび（入れ子のように。テレスコープ）、
+  //      先は ずっと地面（y 213 ＝ 地面 215 のすぐ上）に ついたまま、地面を うしろへ すべって出る。少し止まって、逆にたどって戻る。
   //      のせたくるま・台は動かない
-  //    ふだん：板（元の板 横 72 × 縦 8 と、その中にかくれる 横 72 の中の板）は、x 8〜80・y 92〜100 で平ら（線をふくめて x 6.5）
-  //    いちばん動いたとき：のびた長さ 72 ＋ 56 ＝ 128（元の板と中の板が 16 かさなる）。
-  //      x' ＝ x × cos66° ＋ y × sin66°（x は付け根から左向きなので負）、y' ＝ −x × sin66° ＋ y × cos66°
-  //      先の中心 (−128, 0) → (−52.1, 116.9) → (x 27.9, y 212.9)、先の2つの角 (−128, ±3) → x 25.2〜30.6、y 211.7〜214.1
-  //      （線をふくめて y 215.6 くらい。タイヤの下 y 215 と同じ高さ）。左のはしは x 25.2（線をふくめて 23.7）で、枠の左 x 0 をこえない。
-  //      のびる途中（のびが かたむきより おそい）も、水平に 付け根から 72 より長く出ないので、左のはしは x 8 より左に行かない。
-  //      下の台の くるま（x 84〜144・160〜220）は、板（y 122 の高さで x 70 より左）と かさならない
+  //    計算：まっすぐ下からの角度を φ とすると、先が地面についている条件は、板の長さ L(φ) ＝ 117 ÷ cosφ（117 は付け根 y 96 から y 213 まで）。
+  //      のび e ＝ L − 117：φ 0°・8°・16°・24°・32°・40°・48° で、e ＝ 0・1.15・4.7・11.1・21.0・35.7・57.9（L ＝ 117〜174.9）。
+  //      .ramp-tilt は rotate(−(90 − φ)度)、.ramp-ext は translateX(−e)。この7点を、0・10・20・30・40・50・60% に置く
+  //      （点のあいだは まっすぐつなぐ「linear」。先の高さのずれは 1.7 以下、場面では 1.2 以下）。60〜75% で止まり、
+  //      75〜100% で同じ7点を逆にたどる
+  //    元の板（横 117 × 縦 8）と、その中にかくれる中の板（横 117）。のびの最大 57.9 のとき、2つが 59 かさなる
+  //    いちばん動いたとき（φ 48°、L ＝ 174.9）：先の中心 ＝ (11 − L × sin48°, 96 + L × cos48°) ＝ (11 − 130.0, 96 + 117.0) ＝ (−119.0, 213.0)。
+  //      先の2つの角（板に直角に ±4）は x ±2.7、y ±3.0。左のはしは −119.0 − 2.7 ＝ −121.7（線をふくめて −123.2）。
+  //      場面の x では 92 ＋ 0.7 × (−123.2) ＝ 5.8 で、枠の左 x 0 をこえない（3 以上）。場面の y では 215 ＋ 0.7 × (213 − 215) ＝ 213.6
+  //    車体との すき間：板の右のふちは x ＝ 11 ＋ 4 × cosφ ≦ 15（φ 0° のとき 15）。車体のうしろのはしは x 15 なので、板は車体より
+  //      左（外がわ）を通り、重ならない。下の台（x 18〜）・タイヤ（x 38〜）・のせたくるま（x 62〜）にも当たらない
+  //    右はし：後ろのバンパー x 306（線をふくめて 307.5）→ 場面の x 92 ＋ 0.7 × 307.5 ＝ 307.3（310 の中）
   // =====================================================
   // のせる小さなくるま（まるい箱に まるい屋根。横 60 × 縦 28。左上が (0, 0)）。車輪は半径 7 の ただの circle
   function carrierMiniCar(x, y, color) {
@@ -2256,52 +2266,71 @@
     name: "かーきゃりあー",
     color: "lime",
     width: 310,
-    tip: { x: 150, y: 60 },   // 上の台の2台のくるまのあいだの上（横幅の 48%。上の台は動かない）
-    workTime: 900,
+    // 上の台の2台のくるまのあいだの上。図鑑の (134, 60) → 縮めたあとの場面の x 92 ＋ 0.7 × 134 ＝ 185.8、
+    // y 215 ＋ 0.7 × (60 − 215) ＝ 106.5（横幅の 60%。くるまの屋根の上のはし 図鑑の y 64 → 109.7 のすぐ上。上の台は動かない）
+    tip: { x: 186, y: 107 },
+    workTime: 1000,
     draw: function () {
       var p = LIME;
-      return shadow(160, 148) +
+      return '<g transform="translate(92 215) scale(0.7) translate(0 -215)">' +
+        shadow(160, 148) +
         chassis(15, 297) +
-        // 下の台・柱3本（x 76・148・220 から 8）・下のくるま2台（x 84〜144・160〜220。動かない）
+        // 下の台・柱3本（x 14・130・218 から 8）・下のくるま2台（x 62〜122・146〜206。動かない）
         part("body",
           '<rect x="60" y="159" width="20" height="9" fill="#6e737a"/><rect x="170" y="159" width="20" height="9" fill="#6e737a"/>' +
-          '<rect x="76" y="100" width="8" height="52" rx="2" fill="#8a8f96"/>' +
-          '<rect x="148" y="100" width="8" height="52" rx="2" fill="#8a8f96"/>' +
-          '<rect x="220" y="100" width="8" height="52" rx="2" fill="#8a8f96"/>' +
-          carrierMiniCar(84, 122, "#ffd0b0") + carrierMiniCar(160, 122, "#cfe6f7") +
+          '<rect x="15" y="100" width="8" height="52" rx="2" fill="#8a8f96"/>' +
+          '<rect x="130" y="100" width="8" height="52" rx="2" fill="#8a8f96"/>' +
+          '<rect x="218" y="100" width="8" height="52" rx="2" fill="#8a8f96"/>' +
+          carrierMiniCar(62, 122, "#ffd0b0") + carrierMiniCar(146, 122, "#cfe6f7") +
           '<rect x="18" y="150" width="208" height="10" rx="3" fill="#8a8f96"/>' +
           '<path d="M 24 153 L 220 153" fill="none" stroke="#aab0b6" stroke-width="2.5"/>') +
-        // 上の台（x 80〜226）と、のせた くるま2台（x 88〜148・156〜216）
+        // 上の台（x 15〜226。うしろのはしは車体のうしろのはしとそろう）と、のせた くるま2台（x 62〜122・146〜206）
         part("deck",
-          '<rect x="80" y="92" width="146" height="8" rx="3" fill="#8a8f96"/>' +
-          '<path d="M 86 95 L 220 95" fill="none" stroke="#aab0b6" stroke-width="2.5"/>' +
-          carrierMiniCar(88, 64, "#fff0b3") + carrierMiniCar(156, 64, "#bfeccf")) +
-        // 坂の板（2段）：付け根 (80, 96) が (0, 0)。元の板は付け根から左へ 72（ふだん x 8〜80）、厚さ 8。
-        // 中の板（先に描いて、元の板の下にかくす）は、のびるとき .ramp-ext で左へ 62 出てくる
+          '<rect x="11" y="92" width="215" height="8" rx="3" fill="#8a8f96"/>' +
+          '<path d="M 21 95 L 220 95" fill="none" stroke="#aab0b6" stroke-width="2.5"/>' +
+          carrierMiniCar(62, 64, "#fff0b3") + carrierMiniCar(146, 64, "#bfeccf")) +
+        // 坂の板（2段）：付け根 (11, 96)（上の台のうしろのはし）が (0, 0)。板は付け根から左向き（−x）に描き、
+        // ふだんは .ramp-tilt が rotate(−90度) で まっすぐ下を向く。元の板は長さ 117（地面の少し上まで）、厚さ 8。
+        // 中の板（先に描いて、元の板の下にかくす。長さ 117）は、のびるとき .ramp-ext で −x 向きに 最大 57.9 出てくる
         part("ramp",
-          '<g transform="translate(80 96)"><g class="ramp-tilt">' +
+          '<g transform="translate(11 96)"><g class="ramp-tilt">' +
             '<g class="ramp-ext">' +
-              '<rect x="-72" y="-3" width="72" height="6" rx="3" fill="#aab0b6"/>' +
-              '<path d="M -10 -2 L -10 2 M -30 -2 L -30 2 M -50 -2 L -50 2 M -68 -2 L -68 2" fill="none" stroke="#6e737a" stroke-width="2"/>' +
+              '<rect x="-117" y="-3" width="117" height="6" rx="3" fill="#aab0b6"/>' +
+              '<path d="M -10 -2 L -10 2 M -30 -2 L -30 2 M -50 -2 L -50 2 M -70 -2 L -70 2 M -90 -2 L -90 2 M -110 -2 L -110 2" fill="none" stroke="#6e737a" stroke-width="2"/>' +
             '</g>' +
-            '<rect x="-72" y="-4" width="72" height="8" rx="3" fill="#8a8f96"/>' +
-            '<path d="M -60 -3 L -60 3 M -42 -3 L -42 3 M -24 -3 L -24 3" fill="none" stroke="#6e737a" stroke-width="2"/>' +
+            '<rect x="-117" y="-4" width="117" height="8" rx="3" fill="#8a8f96"/>' +
+            '<path d="M -100 -3 L -100 3 M -80 -3 L -80 3 M -60 -3 L -60 3 M -40 -3 L -40 3 M -20 -3 L -20 3" fill="none" stroke="#6e737a" stroke-width="2"/>' +
             '<circle r="4" fill="#c8ccd0" stroke-width="2"/>' +
           '</g></g>') +
         cab(230, 302, 95, 195, p) +
         lights(297, 161, 20, 170) +
-        tire(60) + tire(140) + tire(255);
+        tire(60) + tire(140) + tire(255) +
+        '</g>';
     },
     css:
-      ".kuruma-car .ramp-tilt, .kuruma-car .ramp-ext { transform-origin: 0 0; }\n" +
-      ".kc-carrier.kw-on .ramp-tilt { animation: kuruma-carrier-ramp 0.9s ease-in-out; }\n" +
-      ".kc-carrier.kw-on .ramp-ext { animation: kuruma-carrier-ext 0.9s ease-in-out; }\n" +
-      /* かたむく（0〜60%）→ 地面で止まる（60〜75%）→ もどる。のびるのは 20〜60% */
-      "@keyframes kuruma-carrier-ramp { 0% { transform: rotate(0deg); } 60%, 75% { transform: rotate(-66deg); }" +
-      " 100% { transform: rotate(0deg); } }\n" +
-      /* もどるときは、のびを先に（88%まで）ちぢめる。かたむきより のびが遅いと、もどる途中に 水平に 72 より長く出て 枠の左をこえる */
-      "@keyframes kuruma-carrier-ext { 0%, 20% { transform: translateX(0); } 60%, 75% { transform: translateX(-56px); }" +
-      " 88%, 100% { transform: translateX(0); } }\n",
+      (function () {
+        // 先が地面についたまま すべる7点（コメントの計算）。まっすぐ下から φ ＝ 0・8・16・24・32・40・48度
+        var ROT = [-90, -82, -74, -66, -58, -50, -42];        // .ramp-tilt の rotate（度）＝ −(90 − φ)
+        var EXT = [0, -1.15, -4.7, -11.1, -21, -35.7, -57.9]; // .ramp-ext の translateX（−e）
+        var tilt = "", ext = "", i, p;
+        for (i = 0; i < 7; i++) {            // ひらく：0・10・…・60%
+          p = i * 10;
+          tilt += p + "% { transform: rotate(" + ROT[i] + "deg); } ";
+          ext += p + "% { transform: translateX(" + EXT[i] + "px); } ";
+        }
+        for (i = 6; i >= 0; i--) {           // 60〜75% は止まる。75〜100% で、同じ7点を逆にたどる
+          p = (75 + (6 - i) * 25 / 6).toFixed(2);
+          tilt += p + "% { transform: rotate(" + ROT[i] + "deg); } ";
+          ext += p + "% { transform: translateX(" + EXT[i] + "px); } ";
+        }
+        return ".kuruma-car .ramp-tilt, .kuruma-car .ramp-ext { transform-origin: 0 0; }\n" +
+          /* ふだんは、板がまっすぐ下へぶら下がる（局所の −x 向きに描いた板を −90度） */
+          ".kuruma-car .ramp-tilt { transform: rotate(-90deg); }\n" +
+          ".kc-carrier.kw-on .ramp-tilt { animation: kuruma-carrier-ramp 1s linear; }\n" +
+          ".kc-carrier.kw-on .ramp-ext { animation: kuruma-carrier-ext 1s linear; }\n" +
+          "@keyframes kuruma-carrier-ramp { " + tilt + "}\n" +
+          "@keyframes kuruma-carrier-ext { " + ext + "}\n";
+      })(),
     // 「ウゥーン・ガタン」：下がっていく機械の音（sawtooth 130 → 95Hz、900Hz でやわらかく）に、
     //   おりきったところで「ガタン」（noise 700Hz ＋ 低い sine）。つぶの音は入れない（レッカーしゃの「カラカラ」と聞き分ける）。0.7秒
     //   測った結果（0.45・0.12・0.15 のとき）：ピーク 0.911、250Hz より下を削ったもの RMS 1.033、3回連打 0.497。目安の中なので、そのまま
