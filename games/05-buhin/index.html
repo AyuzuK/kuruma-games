@@ -442,21 +442,79 @@
         sports:    { label: "wing", names: ["wing"],
                      hole: { shape: "rect", x: 6, y: 114, w: 62, h: 48 } },
         roller:    { label: "roller", names: ["roller"], nth: 1,
-                     hole: { shape: "circle", x: 232, y: 175, r: 46 } }
+                     hole: { shape: "circle", x: 232, y: 175, r: 46 } },
+        // ---- ここから、24台にするときに足した12台（部品がわかりにくい台は、タイヤ） ----
+        tow:       { label: "boom", names: ["boom", "hook"], pad: 4,
+                     hole: { shape: "rect", x: 22, y: 52, w: 116, h: 96 } },
+        grader:    { label: "blade", names: ["blade"], pad: 7,
+                     hole: { shape: "rect", x: 155, y: 112, w: 76, h: 100 } },
+        ambulance: { label: "tire", names: ["tire"], nth: 1,
+                     hole: { shape: "circle", x: 215, y: 192, r: 28 } },
+        bus:       { label: "tire", names: ["tire"], nth: 1,
+                     hole: { shape: "circle", x: 215, y: 192, r: 28 } },
+        doubledecker: { label: "tire", names: ["tire"], nth: 1,
+                     hole: { shape: "circle", x: 210, y: 192, r: 28 } },
+        tractor:   { label: "tire", names: ["tire"], nth: 0, pad: 4,    // うしろの大きなタイヤ
+                     hole: { shape: "circle", x: 100, y: 161, r: 58 } },
+        loader:    { label: "bucket", names: ["bucket"],
+                     hole: { shape: "rect", x: 128, y: 88, w: 138, h: 116 } },
+        forklift:  { label: "fork", names: ["mast", "fork"],
+                     hole: { shape: "rect", x: 190, y: 46, w: 66, h: 162 } },
+        wingtruck: { label: "cargo", names: ["cargo", "panel"],
+                     hole: { shape: "rect", x: 16, y: 66, w: 206, h: 104 } },
+        carrier:   { label: "deck", names: ["deck", "ramp"],
+                     hole: { shape: "rect", x: 14, y: 56, w: 216, h: 48 } },
+        mail:      { label: "tire", names: ["tire"], nth: 1,
+                     hole: { shape: "circle", x: 215, y: 192, r: 28 } },
+        shirobai:  { label: "tire", names: ["tire"], nth: 1,
+                     hole: { shape: "circle", x: 205, y: 189, r: 31 } }
       };
-      // 出題に使う12台（図鑑の順）
+      // 出題に使う24台（今の12台のあとに、足した12台）
       var CAR_IDS = ["fire", "mixer", "crane", "police", "dump", "bulldozer", "shovel", "garbage",
-                     "tanker", "taxi", "sports", "roller"];
+                     "tanker", "taxi", "sports", "roller",
+                     "tow", "grader", "ambulance", "bus", "doubledecker", "tractor",
+                     "loader", "forklift", "wingtruck", "carrier", "mail", "shirobai"];
 
-      // 同じ3択に入れない組み合わせ（その「？」の場所に合いそうに見える・形が似る組）。
-      // 図鑑の名前を、そのまま部品の名前として使う（1台に部品は1つなので）
-      var NG_PAIRS = [
-        ["dump", "mixer"],         // どちらも、トラックの台の上の からっぽの場所にのりそう
-        ["dump", "tanker"],        // 同じ
-        ["mixer", "tanker"],       // 同じ
-        ["police", "taxi"],        // どちらも、屋根の上の小さな光るもの
-        ["bulldozer", "shovel"]    // どちらも、黄色の工事のくるまの前の道具
-      ];
+      // タイヤの台（足りない部品がタイヤの6台）。タイヤのカードは1問に1枚まで、丸いわくの問題には出さない
+      var TIRE_IDS = ["ambulance", "bus", "doubledecker", "tractor", "mail", "shirobai"];
+      // 四角いわくの問題で、まちがい役の候補にするタイヤの台数（毎問 6台から選ぶ。出る割合を おさえるため）
+      var TIRE_IN_POOL = 1;
+
+      // 同じ3択に入れない組み合わせ（その「？」の場所に合いそうに見える・形が似る組）。56組。
+      // 図鑑の名前を、そのまま部品の名前として使う（1台に部品は1つなので）。
+      // まとまりの どの2つも組にするときは、下の allPairs で作る
+      function allPairs(list) {
+        var out = [];
+        for (var i = 0; i < list.length; i++) {
+          for (var j = i + 1; j < list.length; j++) out.push([list[i], list[j]]);
+        }
+        return out;
+      }
+      var NG_PAIRS = [].concat(
+        // トラックの台の上の大きなもの（荷台・ドラム・タンク・荷物の箱・上の台）：どれも からっぽの場所にのりそう（10組）
+        allPairs(["dump", "mixer", "tanker", "wingtruck", "carrier"]),
+        // 前の道具（ブレード・アーム・バケット・つめ）：くるまの前が からっぽのとき どれも合いそう（6組）
+        allPairs(["bulldozer", "shovel", "loader", "forklift"]),
+        [
+          ["grader", "bulldozer"],   // 同じような、土をけずる刃
+          ["grader", "loader"],      // 同じ
+          ["crane", "tow"],          // フックが同じ形
+          ["tow", "shovel"],         // うでの形も合いそう
+          ["tow", "loader"],         // 同じ
+          ["police", "taxi"],        // どちらも、屋根の上の小さな光るもの
+          ["fire", "carrier"]        // どちらも、屋根の上にのる長いもの
+        ],
+        // タイヤどうし：タイヤのカードが1問に2枚出ないように（15組）
+        allPairs(TIRE_IDS),
+        // タイヤ × 丸いわくに合いそうな部品（ランプ・あんどん・前のローラー）：18組
+        (function () {
+          var out = [];
+          for (var i = 0; i < TIRE_IDS.length; i++) {
+            out.push([TIRE_IDS[i], "police"], [TIRE_IDS[i], "taxi"], [TIRE_IDS[i], "roller"]);
+          }
+          return out;
+        })()
+      );
 
       // くるまの枠・カード・画面の並べ方
       var FRAME_W = 310;         // 上のくるまの枠の横
@@ -554,6 +612,12 @@
           for (var j = 0; j < shapes.length; j++) {
             var s = shapes[j];
             if (s.closest("[clip-path], clipPath")) continue;
+            // 図形から svg までの どれかが opacity 0 なら、見えていないので数えない（ウイングトラックの ふだん見えない ひらいた板）
+            var hidden = false;
+            for (var up = s; up && up !== svg; up = up.parentNode) {
+              if (up.nodeType === 1 && window.getComputedStyle(up).opacity === "0") { hidden = true; break; }
+            }
+            if (hidden) continue;
             var cs = s.getScreenCTM();
             if (!cs) continue;                               // 見えていない（display: none の中など）
             var bb;
@@ -624,7 +688,7 @@
       // =====================================================
       function createQuiz(rand) {
         rand = typeof rand === "function" ? rand : Math.random;   // 乱数の関数が渡されないときは Math.random
-        var carBag = C.bag(CAR_IDS, rand);           // 12台を1回ずつ（袋）。同じくるまは続かない
+        var carBag = C.bag(CAR_IDS, rand);           // 24台を1回ずつ（袋）。同じくるまは続かない
         var placer = C.places(rand, 3);              // 正解の場所（3回続けて同じにしない）
         var prevSet = null;                          // 前の問題の3枚の組
         var recent = [];                             // 最近6問の3枚の組（出た回数を数える）
@@ -634,7 +698,17 @@
           for (var a = 0; a < recent.length; a++) {
             for (var b = 0; b < recent[a].length; b++) seen[recent[a][b]] = (seen[recent[a][b]] || 0) + 1;
           }
-          return C.pick(car, CAR_IDS, ng, 3, prevSet, rand, seen);
+          // 四角いわくの問題は、まちがい役の候補のタイヤを TIRE_IN_POOL 台にしぼる（タイヤが出すぎないように）。
+          // 丸いわくの問題は、全部を候補にする（タイヤは NG_PAIRS で出ない）
+          var pool = CAR_IDS;
+          if (PARTS[car].hole.shape === "rect") {
+            pool = [];
+            for (var p = 0; p < CAR_IDS.length; p++) {
+              if (TIRE_IDS.indexOf(CAR_IDS[p]) < 0) pool.push(CAR_IDS[p]);
+            }
+            pool = pool.concat(C.shuffle(TIRE_IDS, rand).slice(0, TIRE_IN_POOL));
+          }
+          return C.pick(car, pool, ng, 3, prevSet, rand, seen);
         }
         function finish(car, set) {
           prevSet = set.slice();
@@ -671,6 +745,8 @@
         PARTS: PARTS,
         NG_PAIRS: NG_PAIRS,
         CAR_IDS: CAR_IDS,
+        TIRE_IDS: TIRE_IDS,
+        TIRE_IN_POOL: TIRE_IN_POOL,
         partEls: partEls,
         measureParts: measureParts
       };
