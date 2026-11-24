@@ -1,0 +1,2077 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <!-- スマホやタブレットでもちょうどいい大きさで表示するための設定 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>くるま くみたて こうじょう</title>
+
+  <!-- 全部のゲームで使う、共通の見た目（拡大を止める・大人用ボタン・指マーク・ぴょん・紙ふぶき） -->
+  <link rel="stylesheet" href="../../shared/kuruma-base.css">
+
+  <style>
+    /* 指の動きがスクロールとして取られないように、動かす物すべてに touch-action: none を付ける */
+    html, body, #stage, #tray, .piece-plate, .piece, #heldLayer, .held-outer {
+      touch-action: none;
+    }
+    body {
+      position: relative;            /* 背景・作業場・指マークは、この画面いっぱいの箱を基準に置く */
+      background: #fdf1d8;           /* かべの色（背景の絵が出るまでの、念のための色） */
+    }
+
+    /* =====================================================
+       背景：おもちゃの工場の中（止まった絵。光らせない・点滅させない）
+       --floor ＝ 床の上のはし（JavaScript が、くるまの位置に合わせて書く）
+       ===================================================== */
+    .scenery {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      overflow: hidden;
+      --floor: 62%;
+      background: linear-gradient(#fdf1d8 0%, #fbe8c2 100%);
+      pointer-events: none;
+    }
+    /* 床：うすい水色のつるっとした面 */
+    .floor {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: var(--floor);
+      bottom: 0;
+      background: linear-gradient(#eaf7fd 0, #eaf7fd 4px, #d9edf7 4px, #cde5f1 100%);
+    }
+    .floor::before,
+    .floor::after {
+      content: "";
+      position: absolute;
+      height: 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.5);
+    }
+    .floor::before { left: 6%;  top: 36%; width: 24%; }
+    .floor::after  { left: 58%; top: 64%; width: 30%; }
+    /* 幅木（かべの下の細い木） */
+    .baseboard {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(var(--floor) - 14px);
+      height: 14px;
+      box-sizing: border-box;
+      background: linear-gradient(#d2ad74, #c29a5f);
+      border-top: 2px solid #e2c597;
+    }
+    /* アーチ形のまど（右よりに置く。低い画面では出さない） */
+    .win {
+      position: absolute;
+      right: 7%;
+      top: calc(var(--floor) * 0.34);
+      width: clamp(54px, 13vw, 110px);
+      aspect-ratio: 3 / 4;
+      box-sizing: border-box;
+      border: 6px solid #c9a46c;
+      border-radius: 999px 999px 6px 6px;
+      background: linear-gradient(#cdebf8, #e8f6fc);
+    }
+    .win::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      margin-left: -2px;
+      background: #c9a46c;
+    }
+    .win::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 55%;
+      height: 4px;
+      background: #c9a46c;
+    }
+    @media (max-height: 460px) {
+      .win { display: none; }
+    }
+    /* 天井からぶら下がる、丸いかさのあかり3つ（上の文字の空きより下に かさが来る） */
+    .lamp {
+      position: absolute;
+      top: 0;
+      width: 0;
+      height: max(88px, 19%);
+    }
+    .lamp::before {                  /* 細い線 */
+      content: "";
+      position: absolute;
+      left: -1px;
+      top: 0;
+      bottom: 14px;
+      width: 2px;
+      background: #b9a98a;
+    }
+    .lamp::after {                   /* かさ（うすい黄色。ぼんやりした まわりの色つき） */
+      content: "";
+      position: absolute;
+      left: -24px;
+      bottom: -14px;
+      width: 48px;
+      height: 28px;
+      box-sizing: border-box;
+      border: 2px solid #e6c978;
+      border-radius: 24px 24px 6px 6px;
+      background: #fff0b0;
+      box-shadow: 0 6px 16px 4px rgba(255, 238, 170, 0.6);
+    }
+
+    /* =====================================================
+       上の文字「くるまを つくろう」（全部はまったあいだは、くるまの名前）
+       広い画面：上から 30px、右上の2つのボタンを避けて左右に 160px ずつあける
+       せまい画面（560px より小さい）：ボタンの段より下（上から 92px）
+       入りきらないときは、JavaScript が文字を小さくして1行に収める
+       ===================================================== */
+    .message {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 30px;
+      padding: 0 160px;
+      font-size: clamp(18px, calc((100vw - 320px) / 12), 32px);
+      line-height: 1.3;
+      z-index: 2;
+    }
+    @media (max-width: 559.98px) {
+      .message {
+        top: 92px;
+        padding: 0 12px;
+        font-size: clamp(20px, 6vw, 32px);
+      }
+      .lamp { height: max(145px, 23%); }   /* 文字が下がるので、あかりのかさも文字より下へ */
+    }
+
+    /* 下のはしの あき（iPhone のホームバー）を測るための、見えない箱 */
+    #safeProbe {
+      position: fixed;
+      left: 0;
+      bottom: 0;
+      width: 0;
+      height: 0;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      visibility: hidden;
+      pointer-events: none;
+    }
+    /* 部品の範囲を測るための、画面の外に置いた箱 */
+    #measureHost {
+      position: fixed;
+      left: -3000px;
+      top: 0;
+      width: 400px;
+      height: 240px;
+      pointer-events: none;
+    }
+
+    /* =====================================================
+       作業場（#stage）
+         #target      … くるまの横の箱。左端に置いて、translateX だけで場所を決める（共通の部品 mover）
+         .car-frame   … 大きさの箱。310 × 220 を scale(ks)。左下を中心に縮める
+         .kuruma-hop  … はねる箱（ぴょん）
+         .car-shake   … エンジンの ゆれの箱（はねる箱とは別。同じ箱に2つの動きを当てない）
+         <svg>        … 図鑑のくるまの絵
+       #tray … 部品の台が並ぶ棚（トレー）
+       ===================================================== */
+    #stage {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 0;                    /* 作業場をひとまとめにして、指マーク（1）・持つ箱（2）より奥に置く */
+      overflow: hidden;              /* 右へ走りさるくるまで、横のスクロールが出ないように */
+      pointer-events: none;
+    }
+    #target {
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+    .car-frame {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 310px;
+      height: 220px;
+      transform-origin: 0 100%;      /* 左下。縮めた見た目が #target にぴったり重なる */
+    }
+    .car-frame > .kuruma-hop,
+    .car-frame .car-shake {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+    }
+    /* 図鑑の絵を、枠の下そろえに置く（横は JavaScript が style で書く） */
+    .car-frame .kuruma-car {
+      top: auto;
+      bottom: 0;
+    }
+    /* エンジンがかかる：2px ずつ、0.12秒で3回（合わせて 0.4秒）の小さな上下。1回だけ */
+    .car-shake.engine {
+      animation: burun 0.4s linear 1;
+    }
+    @keyframes burun {
+      0%, 33%, 66%, 100% { transform: translateY(0); }
+      16%, 50%, 83%      { transform: translateY(-2px); }
+    }
+
+    /* ----- はめる場所（図鑑の絵の足りない部品を、うすい形にする） -----
+       うすい白の塗り ＋ 少し濃い青灰の輪郭線。fill="none" の線・stroke="none" の面は そのまま残す */
+    .kuruma-car .part-slot {
+      opacity: 0.7;
+      transition: opacity 0.3s ease;
+    }
+    .kuruma-car .part-slot,
+    .kuruma-car .part-slot [fill]:not([fill="none"]) {
+      fill: #e4eef6;
+    }
+    .kuruma-car .part-slot[stroke]:not([stroke="none"]),
+    .kuruma-car .part-slot [stroke]:not([stroke="none"]) {
+      stroke: #7f95ad;
+    }
+    .kuruma-car .part-slot [fill] {
+      transition: fill 0.3s ease;
+    }
+    /* 近づいた・そっと教える：うすい黄色の塗りに ふわっと変わって、そのまま（点滅しない） */
+    .kuruma-car .part-slot.slot-hint {
+      opacity: 0.85;
+      transition: opacity 0.8s ease-out;
+    }
+    .kuruma-car .part-slot.slot-hint [fill] {
+      transition: fill 0.8s ease-out;
+    }
+    .kuruma-car .part-slot.slot-near {
+      opacity: 0.85;
+      transition: opacity 0.15s ease-out;
+    }
+    .kuruma-car .part-slot.slot-near [fill] {
+      transition: fill 0.15s ease-out;
+    }
+    .kuruma-car .part-slot.slot-near,
+    .kuruma-car .part-slot.slot-hint,
+    .kuruma-car .part-slot.slot-near [fill]:not([fill="none"]),
+    .kuruma-car .part-slot.slot-hint [fill]:not([fill="none"]) {
+      fill: #fff1a8;
+    }
+    .kuruma-car .part-slot.slot-near[stroke]:not([stroke="none"]),
+    .kuruma-car .part-slot.slot-near [stroke]:not([stroke="none"]),
+    .kuruma-car .part-slot.slot-hint[stroke]:not([stroke="none"]),
+    .kuruma-car .part-slot.slot-hint [stroke]:not([stroke="none"]) {
+      stroke: #dcb23c;
+    }
+    /* いっしょに かくす部品（うんてんせきの前のライト、屋根のランプ、タンクののぞきまど） */
+    .kuruma-car .part-missing {
+      visibility: hidden;
+    }
+    /* 運ぶ絵：残す部品（part-keep）だけを出して、ほかの部品は出さない */
+    .kuruma-car.part-only [data-part]:not(.part-keep) {
+      display: none;
+    }
+
+    /* はまった場所に、うすい黄色の輪が ふわっと広がって消える（1回だけ） */
+    .fit-ring {
+      position: absolute;
+      box-sizing: border-box;
+      border: 4px solid rgba(255, 214, 90, 0.9);
+      border-radius: 16px;
+      box-shadow: 0 0 10px 3px rgba(255, 226, 120, 0.8);
+      pointer-events: none;
+      animation: ring-out 0.6s ease-out forwards;
+    }
+    @keyframes ring-out {
+      0%   { opacity: 0.9; transform: scale(1); }
+      100% { opacity: 0;   transform: scale(1.25); }
+    }
+
+    /* ----- トレー（棚）と部品の台 ----- */
+    #tray {
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+    .shelf {
+      position: absolute;
+      box-sizing: border-box;
+      border: 3px solid #c99a5b;
+      border-radius: 22px;
+      background: linear-gradient(#efd3a0, #e4bf86);
+      box-shadow: 0 6px 0 #b98a4c, 0 10px 14px rgba(120, 80, 30, 0.25);
+    }
+    /* 部品の台：角の丸い、クリーム色の台。この四角が そのまま「つかめる四角」。
+       ふちは inset の影で描く（枠線があると、中に置く部品の位置がずれるため） */
+    .piece-plate {
+      position: absolute;
+      box-sizing: border-box;
+      border-radius: 18px;
+      background: #fff4d6;
+      box-shadow: inset 0 0 0 3px #d6b077, 0 5px 0 #c49a5c;
+      transition: box-shadow 0.3s ease, background-color 0.3s ease;
+    }
+    /* からっぽの台：うすい凹み */
+    .piece-plate[data-empty="true"] {
+      background: #efe0bd;
+      box-shadow: inset 0 3px 6px rgba(120, 80, 30, 0.25), inset 0 0 0 3px #dcc08a, 0 2px 0 #d9bf8b;
+    }
+    /* そっと教える光：ふち・外がわが、0.8秒でやわらかく明るくなって、そのまま（くり返さない＝点滅しない） */
+    .piece-plate[data-glow="true"] {
+      box-shadow: inset 0 0 0 3px #f0b92b, 0 5px 0 #c49a5c, 0 0 0 4px rgba(255, 220, 100, 0.9), 0 0 12px 6px rgba(255, 226, 120, 0.85);
+      transition: box-shadow 0.8s ease-out, background-color 0.3s ease;
+    }
+    .piece {
+      position: absolute;
+      pointer-events: none;          /* 受け口は、DOM から動かない台（.piece-plate）だけにする */
+    }
+    .piece-hop {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+    }
+
+    /* ----- 持つ箱（つかんだ部品。ページのいちばん上に fixed で置く）-----
+       外の箱 ＝ 指の場所（transition なし）／中の箱 ＝ 浮く形（1.15倍・24px 上）／うしろに やわらかい影 */
+    #heldLayer {
+      position: fixed;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 2;                    /* 上の文字と同じ。指マーク（1）より手前、紙ふぶき（3）・大人用ボタン（4）より奥 */
+      pointer-events: none;
+    }
+    .held-outer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      will-change: transform;
+    }
+    .held-inner {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      transform-origin: 50% 50%;
+    }
+    .held-shadow {
+      position: absolute;
+      left: 6%;
+      right: 6%;
+      top: calc(100% + 10px);
+      height: 16px;
+      border-radius: 50%;
+      background: radial-gradient(closest-side, rgba(70, 45, 20, 0.3), rgba(70, 45, 20, 0));
+      opacity: 0;
+      transition: opacity 0.12s ease;
+    }
+    .held-inner.lifted .held-shadow {
+      opacity: 1;
+    }
+
+    /* ----- 指マーク：部品の台から、はめる場所まで「スーッと運ぶ」（1台目だけ）-----
+       外の箱の不透明度は kuruma-base.css の .show に任せる。動かすのは、見えているあいだの中の <svg> だけ。
+       出るたびに、かならず 0秒（部品の上）から始まる */
+    .finger-hint.carry svg {
+      animation: none;
+      transform-origin: 64% 100%;
+    }
+    .finger-hint.carry.show svg {
+      animation: carry 2.8s ease-in-out infinite;
+    }
+    @keyframes carry {
+      0%   { opacity: 0; transform: translate(0, 0) scale(1); }
+      14%  { opacity: 1; transform: translate(0, 0) scale(1); }                              /* 0.4秒：ふわっと出る */
+      25%  { opacity: 1; transform: translate(0, 0) scale(0.9); }                            /* 0.7秒：つかむ（少し小さく） */
+      71%  { opacity: 1; transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(0.9); }  /* 2.0秒：はめる場所へ */
+      86%  { opacity: 1; transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(1); }    /* 2.4秒：はなす */
+      100% { opacity: 0; transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(1); }    /* 2.8秒：ふわっと消える */
+    }
+
+    /* 動きを減らす設定：ひとりでに動くところを止める（指についてくる動きは、子どもが動かしているので そのまま） */
+    @media (prefers-reduced-motion: reduce) {
+      .finger-hint.carry.show svg { animation: none; }
+      .car-shake.engine { animation: none; }
+      .kuruma-car .part-slot,
+      .kuruma-car .part-slot [fill],
+      .kuruma-car .part-slot.slot-hint,
+      .kuruma-car .part-slot.slot-hint [fill],
+      .kuruma-car .part-slot.slot-near,
+      .kuruma-car .part-slot.slot-near [fill],
+      .piece-plate,
+      .piece-plate[data-glow="true"] {
+        transition: none;
+      }
+      .fit-ring { display: none; }
+    }
+  </style>
+</head>
+<body data-scene="build" data-car="dump" data-pieces="2" data-placed="0" data-held="" data-hint="off" data-misses="0">
+
+  <!-- ===== 背景：工場の中（かべ・あかり・まど・幅木・床） ===== -->
+  <div class="scenery" id="scenery" aria-hidden="true">
+    <div class="lamp" style="left: 9%;"></div>
+    <div class="lamp" style="left: 31%;"></div>
+    <div class="lamp" style="left: 67%;"></div>
+    <div class="win"></div>
+    <div class="baseboard"></div>
+    <div class="floor"></div>
+  </div>
+
+  <div id="safeProbe" aria-hidden="true"></div>
+  <div id="measureHost" aria-hidden="true"></div>
+
+  <!-- data-showing：いま出している文字の種類（title ＝ 「くるまを つくろう」、name ＝ くるまの名前） -->
+  <p class="kuruma-message message" id="message" data-showing="title">くるまを つくろう</p>
+
+  <!-- 大人用のボタン（どちらも2秒長押し）。トップ画面へ戻る・音を消す -->
+  <button class="adult-btn home-btn" id="homeBtn" type="button" aria-label="もどる（2びょう ながおし）">
+    <!-- おうちの形（三角の屋根、四角いかべ、まん中に戸） -->
+    <svg viewBox="0 0 26 26" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="#5a3d1e" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M 6 11.5 L 6 23 L 20 23 L 20 11.5" fill="#fff3c4"/>
+        <path d="M 2.5 13 L 13 3.5 L 23.5 13"/>
+        <path d="M 10.5 23 L 10.5 17 L 15.5 17 L 15.5 23"/>
+      </g>
+    </svg>
+  </button>
+  <button class="adult-btn mute-btn" id="muteBtn" type="button" aria-label="おとを けす（2びょう ながおし）">🔊</button>
+
+  <!-- 作業場：くるま（#target）と、部品の台が並ぶ棚（#tray）。中身は JavaScript が作る -->
+  <div id="stage">
+    <div id="tray" data-shape="T1" data-place="below"></div>
+  </div>
+
+  <!-- 持つ箱（つかんだ部品・戻る途中・すいこまれる途中の部品を、ここへ移す） -->
+  <div id="heldLayer" aria-hidden="true"></div>
+
+  <!-- 全部のゲームで使う、共通の部品（音 → BGM → さわる操作 → くるまの図鑑 → 動き → 選ぶ仕組み の順に読み込む） -->
+  <script src="../../shared/kuruma-sound.js"></script>
+  <script src="../../shared/kuruma-bgm.js"></script>
+  <script src="../../shared/kuruma-touch.js"></script>
+  <script src="../../shared/kuruma-cars.js"></script>
+  <script src="../../shared/kuruma-stage.js"></script>
+  <script src="../../shared/kuruma-choice.js"></script>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var K = window.Kuruma;
+      var C = K.choice;
+
+      // =====================================================
+      // 設定（数字を変えると動きが変わります。時間はミリ秒、大きさは画面の px）
+      // =====================================================
+      var CAR_IDS = ["dump", "mixer", "garbage", "tanker", "fire", "bulldozer"];
+
+      // くるまの枠（図鑑の絵が入る大きさ）と、測った範囲のまわりに足す余白
+      var FRAME_W = 310;
+      var FRAME_H = 220;
+      var PAD = 3;
+
+      // 指で動かす操作
+      var LIFT_TIME = 120;       // つかんだとき、浮くのにかける時間
+      var LIFT_SCALE = 1.15;     // 浮いたときの大きさ
+      var LIFT_UP = 24;          // 浮いたとき、上へ上がる量
+      var GRAB_PAD = 12;         // 部品の台は、部品より これだけ広い
+      var GRAB_MIN = 64;         // 部品の台の、いちばん小さい大きさ
+      var EDGE_SAFE = 40;        // 左右のはしの あき（iPhone の「戻る」動きに かからないように）
+      var SNAP_MIN = 56;         // 吸い寄せる半径の下限
+      var SNAP_K = 0.4;          // 吸い寄せる半径 ＝ はめる場所の長い辺 × これ
+      var NEAR_HYST = 12;        // 明るい場所を消す境目の ゆとり
+      var SNAP_TIME = 180;       // すいこまれる時間
+      var RETURN_TIME = 500;     // ゆっくり元の台に戻る時間
+      var TAP_BACK = 150;        // さわっただけのとき、台に戻る時間
+      var TAP_MOVE = 10;         // これ未満の動きなら「さわっただけ」
+      var TAP_TIME = 300;        // これ未満の時間なら「さわっただけ」
+      var REDUCED_FADE = 150;    // 動きを減らす設定：ふわっと消える・出る時間
+
+      // 画面の並べ方
+      var CAR_MAX = 1.3;         // くるまの率の上限
+      var CAR_MIN = 0.55;        // これより小さくしない
+      var BOTTOM_BASE = 24;      // 画面の下の あき（この上に、iPhone のホームバーぶんを足す）
+      var VGAP = 16;             // 縦ならび：くるまとトレーのあいだ
+      var HGAP = 24;             // 横ならび：くるまとトレーのあいだ
+      var TRAY_GAP = 12;         // 部品の台どうしのあいだ
+      var SHELF_PAD = 8;       // 棚（木の板）が、台のまわりに広がる量
+      var MAX_EXTRA = 120;       // 浮いただけで はまらないように広げる量の上限
+      var ADULT_BOTTOM = 76;     // 音を消しているときの大人用ボタン（64px）の下のはし
+      var HOME_URL = "../../index.html"; // トップ画面
+
+      // 場面の流れ（最後のピースが「はまった時刻」を 0 とする）
+      var WORK_AT = 800;         // 仕事を始める
+      var ENGINE_AT = 2000;      // エンジンがかかる（ゆれ ＋ タイヤが回り始める）
+      var LEAVE_AT = 2400;       // 右へ走りさる
+      var TRAY_FADE = 400;       // 部品の台が ふわっと消える
+      var MIN_RUN_TIME = 300;    // 走りさる時間の下限
+      var MIN_STEP = 40;         // 1歩の長さの最低（走る時間の計算のもと）
+      var STEP_DIV = 6;          // 1歩の長さ ＝ 画面の横幅 ÷ これ
+      var REDUCED_LEAVE = 500;   // 動きを減らす設定：その場で ふわっと消える時間
+      var ENTER_TIME = 1200;     // 入ってくるくるまの移動の時間
+      var ENTER_TOTAL = 1500;    // 入ってくるのに かかる時間
+      var TRAY_AT = 1100;        // 部品の台が出始める時刻（enter から）
+      var TRAY_IN = 400;         // 部品の台が ふわっと出る時間
+      var REDUCED_ENTER = 400;   // 動きを減らす設定：ふわっと出る時間
+      var REDUCED_ENTER_TOTAL = 500;
+      var NUDGE_TIME = 8000;     // 2台目から：さわらないでいると、そっと教えるまで（1台に1回）
+      var MSG_FADE = 250;        // 上の文字が消える時間・出る時間（それぞれ）
+      var MIN_MSG_FONT = 12;     // 上の文字を縮めるときの下限
+      var TITLE_TEXT = "くるまを つくろう";   // ふだんの上の文字
+
+      // 6台の表：特ちょうの部品（main）・うんてんせき（cab）・3つ目（third。"tire" か、キャタピラ）
+      //   parts … 運ぶ絵に出す data-part（1つ目が、くるまの上の「はめる場所」になる。2つ目からは、はめる場所では かくす）
+      //   withParts … 運ぶ絵には入れず、はめる場所では いっしょに かくして、はまったら出す data-part
+      //   tires … くるまにあるタイヤの数（左から 0, 1, 2）
+      // 足すときは、ここに1行足すだけ
+      var CABS_LIGHT = { kind: "cab", parts: ["cab"], withParts: ["light"] };
+      var CARS = {
+        dump:      { main: { kind: "bed",    parts: ["bed"],              withParts: [] }, cab: CABS_LIGHT, third: "tire", tires: 3 },
+        mixer:     { main: { kind: "drum",   parts: ["drum"],             withParts: [] }, cab: CABS_LIGHT, third: "tire", tires: 3 },
+        garbage:   { main: { kind: "lid",    parts: ["lid"],              withParts: [] }, cab: CABS_LIGHT, third: "tire", tires: 3 },
+        tanker:    { main: { kind: "tank",   parts: ["tank", "porthole"], withParts: [] }, cab: CABS_LIGHT, third: "tire", tires: 3 },
+        fire:      { main: { kind: "ladder", parts: ["ladder"],           withParts: [] },
+                     cab: { kind: "cab", parts: ["cab"], withParts: ["light", "lamp", "glow"] }, third: "tire", tires: 3 },
+        bulldozer: { main: { kind: "blade",  parts: ["blade"],            withParts: [] },
+                     cab: { kind: "cab", parts: ["cab"], withParts: [] },
+                     third: { kind: "track", parts: ["track"], withParts: [] }, tires: 0 }
+      };
+
+      // =====================================================
+      // ページの部品
+      // =====================================================
+      var body = document.body;
+      var message = document.getElementById("message");
+      var muteBtn = document.getElementById("muteBtn");
+      var homeBtn = document.getElementById("homeBtn");
+      var stage = document.getElementById("stage");
+      var tray = document.getElementById("tray");
+      var scenery = document.getElementById("scenery");
+      var heldLayer = document.getElementById("heldLayer");
+      var measureHost = document.getElementById("measureHost");
+      var safeProbe = document.getElementById("safeProbe");
+
+      // =====================================================
+      // いまの状態
+      // =====================================================
+      var scene = "build";         // いまの場面（build・done・leave・enter）
+      var token = 0;               // くるまが変わるたびに増やす（古い予約を使わないため）
+      var cur = null;              // いまのくるま（buildStage が作る）
+      var L = null;                // いまの並べ方（画面の大きさから計算した値）
+      var carNo = 0;               // 何台目か（0 から。画面には出さない）
+      var misses = 0;              // 「ちがう」の数（1台のあいだ。画面には出さない）
+      var hintTarget = null;       // そっと教える光が出ているピース（いつも1つだけ）
+      var hintReason = "off";      // 光る理由：miss（2回ちがう）・idle（しばらく動かさない）・finger（指マーク）
+      var idleUsed = false;        // 8秒の光を、この台で もう使ったか
+      var fingerDone = false;      // 1台目で、どれかのピースが はまったか（はまったら指マークは二度と出さない）
+      var idleTimer = null;
+      var settling = false;        // 画面の大きさが変わって、すぐ はめているあいだ
+      var finger = null;           // 指マーク（1台目だけ）
+      var factory = null;
+      var drag = null;
+
+      // 動きを減らす設定か（そのときどきで調べる）
+      function reduced() {
+        return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+      }
+      // 決まった時間のあとに関数を呼ぶ（くるまが変わっていたら呼ばない）
+      function later(ms, fn) {
+        var t = token;
+        return setTimeout(function () { if (t === token) fn(); }, ms);
+      }
+      function div(cls) {
+        var d = document.createElement("div");
+        if (cls) d.className = cls;
+        return d;
+      }
+      function rm(node) {
+        if (node && node.parentNode) node.parentNode.removeChild(node);
+      }
+      function dist(ax, ay, bx, by) {
+        var dx = ax - bx;
+        var dy = ay - by;
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+      // 下のはしの あき：24px ＋ iPhone のホームバーぶん（env の値を、見えない箱で測る）
+      function bottomGap() {
+        var v = parseFloat(window.getComputedStyle(safeProbe).paddingBottom);
+        return BOTTOM_BASE + (isFinite(v) ? v : 0);
+      }
+      function topGap() {
+        return Math.max(message.getBoundingClientRect().bottom, ADULT_BOTTOM) + 8;
+      }
+
+      // ===== 場面を <body> に書く（テストの台本が場面を待てるように） =====
+      function setScene(value) {
+        scene = value;
+        body.setAttribute("data-scene", value);
+      }
+      function placedCount() {
+        var n = 0;
+        if (!cur) return 0;
+        for (var i = 0; i < cur.slots.length; i++) {
+          if (cur.slots[i].fill === "filled") n++;
+        }
+        return n;
+      }
+      function refreshBody() {
+        if (!cur) return;
+        body.setAttribute("data-car", cur.id);
+        body.setAttribute("data-pieces", String(cur.pieces.length));
+        body.setAttribute("data-placed", String(placedCount()));
+        body.setAttribute("data-misses", String(misses));
+      }
+      function allPlaced() {
+        return !!cur && cur.slots.length > 0 && placedCount() === cur.slots.length;
+      }
+
+      // =====================================================
+      // 出題器：1台ぶんの くるまとピースの並びを決める
+      //   createFactory(rand).next() が { car: 図鑑の名前, pieces: [{ kind, parts, withParts, index }] } を返す。
+      //   1台目はダンプカー（荷台 → うんてんせき の順）。2台目からは6台を袋から出す。
+      //   同じくるまは続けて出さない（袋の外から出した1台目の次だけ、nextCar で よける）。
+      //   ピースの数は 1台目 2つ、2・3台目 3つ、4台目から 4つ（ブルドーザーは3つまで）。
+      //   2台目からは、ピースの並びを まぜる（トレーの形に当てはめるのは、並べ方の側）。
+      //   乱数は、すべて引数の rand を通す（決まった並びを渡せば、同じ結果になる）
+      // =====================================================
+      function pieceList(id, count) {
+        var def = CARS[id];
+        var list = [
+          { kind: def.main.kind, parts: def.main.parts.slice(), withParts: def.main.withParts.slice(), index: 0 },
+          { kind: def.cab.kind, parts: def.cab.parts.slice(), withParts: def.cab.withParts.slice(), index: 0 }
+        ];
+        if (def.third === "tire") {
+          // 前のタイヤ（いちばん右＝いちばん最後の番号）→ うしろのタイヤ（いちばん左＝番号 0）
+          list.push({ kind: "tire", parts: ["tire"], withParts: [], index: def.tires - 1 });
+          list.push({ kind: "tire", parts: ["tire"], withParts: [], index: 0 });
+        } else {
+          list.push({ kind: def.third.kind, parts: def.third.parts.slice(), withParts: def.third.withParts.slice(), index: 0 });
+        }
+        return list.slice(0, Math.min(count, list.length));
+      }
+      function createFactory(rand) {
+        var r = typeof rand === "function" ? rand : Math.random;
+        var bag = C.bag(CAR_IDS, r);
+        var spare = null;          // 同じくるまが続かないよう、よけておいた1台
+        var made = 0;
+        var prev = null;
+        function nextCar(prevId) {
+          if (spare) {
+            var c = spare;
+            spare = null;
+            return c;
+          }
+          var x = bag.next();
+          if (x !== prevId) return x;
+          var y = bag.next();      // 同じだったら、もう1台 取り出して先に出す
+          spare = x;               // よけた x は、その次に出す
+          return y;
+        }
+        return {
+          next: function () {
+            var id = made === 0 ? "dump" : nextCar(prev);
+            var count = made === 0 ? 2 : (made <= 2 ? 3 : 4);
+            var pieces = pieceList(id, count);
+            if (made > 0) pieces = C.shuffle(pieces, r);
+            made++;
+            prev = id;
+            return { car: id, pieces: pieces };
+          }
+        };
+      }
+      function specKey(spec) {
+        return spec.kind === "tire" ? "tire" + spec.index : spec.kind;
+      }
+
+      // =====================================================
+      // 部品の範囲を測る
+      //   見えている末端の図形（path・rect・circle など）ごとの getBBox を、svg の座標に直して囲む。
+      //   <g> や <svg>（入れ物）には getBBox をかけない（切りぬかれて見えない形で、実際より大きく測れるため）。
+      //   [clip-path] の中・<clipPath> の中・display: none の中・不透明度 0 のものは、数えない。
+      //   svg はページの中に入っていて、見えている（display: none でない）ことが必要。測れなければ null
+      // =====================================================
+      function measureParts(svg, els) {
+        var screen = svg.getScreenCTM ? svg.getScreenCTM() : null;
+        if (!screen) return null;
+        var inv;
+        try { inv = screen.inverse(); } catch (err0) { return null; }
+        var minX = Infinity;
+        var minY = Infinity;
+        var maxX = -Infinity;
+        var maxY = -Infinity;
+        for (var i = 0; i < els.length; i++) {
+          if (!els[i]) continue;
+          var shapes = els[i].querySelectorAll("path, rect, circle, ellipse, line, polygon, polyline");
+          for (var j = 0; j < shapes.length; j++) {
+            var s = shapes[j];
+            if (s.closest("[clip-path], clipPath")) continue;
+            var hidden = false;
+            for (var up = s; up && up !== svg; up = up.parentNode) {
+              if (up.nodeType === 1 && window.getComputedStyle(up).opacity === "0") { hidden = true; break; }
+            }
+            if (hidden) continue;
+            var cs = s.getScreenCTM();
+            if (!cs) continue;
+            var bb;
+            try { bb = s.getBBox(); } catch (err) { continue; }
+            var m = inv.multiply(cs);
+            var xs = [bb.x, bb.x + bb.width];
+            var ys = [bb.y, bb.y + bb.height];
+            for (var a = 0; a < 2; a++) {
+              for (var b = 0; b < 2; b++) {
+                var px = m.a * xs[a] + m.c * ys[b] + m.e;
+                var py = m.b * xs[a] + m.d * ys[b] + m.f;
+                if (px < minX) minX = px;
+                if (px > maxX) maxX = px;
+                if (py < minY) minY = py;
+                if (py > maxY) maxY = py;
+              }
+            }
+          }
+        }
+        if (!isFinite(minX) || maxX <= minX || maxY <= minY) return null;
+        return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+      }
+
+      // svg の中から、data-part の名前の部品を集める
+      function partEls(svg, names) {
+        var out = [];
+        for (var i = 0; i < names.length; i++) {
+          var all = svg.querySelectorAll('[data-part="' + names[i] + '"]');
+          for (var j = 0; j < all.length; j++) out.push(all[j]);
+        }
+        return out;
+      }
+
+      // くるまごとの、ピースの範囲（くるまの座標）。1台につき1回だけ、画面の外の箱で測る
+      var RECTS = {};
+      function ensureMeasured(id) {
+        if (RECTS[id]) return RECTS[id];
+        var def = CARS[id];
+        var car = K.cars.create(id);
+        measureHost.appendChild(car.el);
+        var out = {};
+        var specs = [def.main, def.cab];
+        if (def.third !== "tire") specs.push(def.third);
+        var i;
+        for (i = 0; i < specs.length; i++) {
+          out[specs[i].kind] = measureParts(car.el, partEls(car.el, specs[i].parts)) || { x: 0, y: 0, w: 60, h: 60 };
+        }
+        var tires = car.el.querySelectorAll('[data-part="tire"]');
+        for (i = 0; i < tires.length; i++) {
+          out["tire" + i] = measureParts(car.el, [tires[i]]) || { x: 0, y: 0, w: 44, h: 44 };
+        }
+        rm(car.el);
+        RECTS[id] = out;
+        return out;
+      }
+
+      // =====================================================
+      // 指で動かす操作の部品（くるまに しばられない形。あとで「くるまパズル」でも使えるように）
+      //   createDragger(オプション) が { add, remove, updateHome, handleDown, settle, cancel, isHolding } を返す。
+      //   ・つかむのは1本の指だけ（pointerId）。window で pointermove・pointerup・pointercancel を受け取る
+      //     （要素に指を固定する仕組みは使わない。絵が持つ箱へ移っても、受け取りが外れないように）
+      //   ・持つ箱は2層：外の箱 ＝ 指の場所（transition なし）、中の箱 ＝ 浮く形
+      //   ・つかんだときの「指とピースのずれ」を保って ついてくる。ピースは画面の外へ出ない
+      //   ・はなしたときの判定の順：さわっただけ → はまる → ちがう（枠の中）→ 外
+      //   ・item は ゲームの側の絵の入れ物 { data }。callbacks には data を渡す
+      // =====================================================
+      function createDragger(o) {
+        var items = [];
+        var held = null;           // { it, box, pointerId, dx, dy, sx, sy, t0, moved, near, vx, vy }
+        var frame = 0;
+
+        function setState(it, s) {
+          it.state = s;
+          it.itemEl.setAttribute("data-state", s);
+          it.plateEl.setAttribute("data-empty", s === "tray" ? "false" : "true");
+        }
+        // 絵を台のまん中に置く（台に入れ直すときにも使う）
+        function seat(it) {
+          var pw = parseFloat(it.plateEl.style.width) || it.home.width;
+          var ph = parseFloat(it.plateEl.style.height) || it.home.height;
+          it.itemEl.style.left = ((pw - it.home.width) / 2) + "px";
+          it.itemEl.style.top = ((ph - it.home.height) / 2) + "px";
+          if (it.itemEl.parentNode !== it.plateEl) it.plateEl.appendChild(it.itemEl);
+        }
+        function find(plateEl) {
+          for (var i = 0; i < items.length; i++) {
+            if (items[i].plateEl === plateEl) return items[i];
+          }
+          return null;
+        }
+        // さわった場所に当たる、台（つかめる四角）を さがす
+        function hit(x, y) {
+          for (var i = 0; i < items.length; i++) {
+            var r = items[i].plateEl.getBoundingClientRect();
+            if (r.width > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return items[i];
+          }
+          return null;
+        }
+
+        // ----- 持つ箱を作る：絵を、作り直さずに ここへ移す。移す前の場所に置くので、見た目は動かない -----
+        function makeBox(it) {
+          var outer = div("held-outer");
+          var inner = div("held-inner");
+          var shadow = div("held-shadow");
+          outer.style.width = it.home.width + "px";
+          outer.style.height = it.home.height + "px";
+          outer.style.transform = "translate(" + it.home.left + "px," + it.home.top + "px)";
+          inner.appendChild(shadow);
+          it.itemEl.style.left = "0px";
+          it.itemEl.style.top = "0px";
+          inner.appendChild(it.itemEl);
+          outer.appendChild(inner);
+          o.layer.appendChild(outer);
+          return { outer: outer, inner: inner, shadow: shadow };
+        }
+        // 0.12秒で、少し大きく・少し上へ浮く（動きを減らす設定でも、形は同じ。すぐ その形にする）
+        function lift(b) {
+          var tf = "translateY(" + (-o.lift.up) + "px) scale(" + o.lift.scale + ")";
+          if (o.reduced()) {
+            b.inner.style.transition = "none";
+            b.shadow.style.transition = "none";
+            b.inner.style.transform = tf;
+          } else {
+            b.inner.style.transition = "transform " + o.lift.time + "ms ease-out";
+            void b.inner.offsetWidth;
+            b.inner.style.transform = tf;
+          }
+          b.inner.classList.add("lifted");
+        }
+
+        // ----- 指の場所 → 見えているピースのまん中（はしで止める） -----
+        function visibleCenter(h, fx, fy) {
+          var W = window.innerWidth;
+          var H = window.innerHeight;
+          var halfH = h.it.home.height * o.lift.scale / 2;
+          var vx = fx + h.dx;
+          var vy = fy + h.dy - o.lift.up;
+          vx = Math.max(o.edge, Math.min(vx, W - o.edge));
+          vy = Math.max(halfH, Math.min(vy, H - halfH));
+          return { x: vx, y: vy };
+        }
+        function writeBox() {
+          frame = 0;
+          if (!held) return;
+          var it = held.it;
+          held.box.outer.style.transform = "translate(" +
+            (held.vx - it.home.width / 2) + "px," + (held.vy + o.lift.up - it.home.height / 2) + "px)";
+        }
+        function flush() {
+          if (frame) {
+            cancelAnimationFrame(frame);
+            frame = 0;
+          }
+          writeBox();
+        }
+
+        // ----- 近づいたとき：いちばん近い空いた場所を、いつも1つだけ明るくする -----
+        function updateNear() {
+          var h = held;
+          var list = o.targets(h.it.data);
+          var best = null;
+          var bestD = Infinity;
+          var now = null;
+          var nowD = Infinity;
+          for (var i = 0; i < list.length; i++) {
+            var t = list[i];
+            var d = dist(h.vx, h.vy, t.center.x, t.center.y);
+            if (h.near && t.id === h.near.id) { now = t; nowD = d; }
+            if (d <= t.radius && d < bestD) { best = t; bestD = d; }
+          }
+          var next;
+          if (best) {
+            // もっと近い別の場所が R の中に入ったら、すぐ切りかえる
+            next = (now && nowD <= bestD) ? now : best;
+          } else if (now) {
+            // どの場所も R の外：いまの場所から R ＋ ゆとり をこえたら消す（境目で ちらつかない）
+            next = nowD <= now.radius + o.nearHyst ? now : null;
+          } else {
+            next = null;
+          }
+          var changed = (next ? next.id : null) !== (h.near ? h.near.id : null);
+          h.near = next;
+          if (changed) o.onNear(h.it.data, next);
+        }
+
+        // ----- つかむ -----
+        function grab(it, e) {
+          var b = makeBox(it);
+          var cx = it.home.left + it.home.width / 2;
+          var cy = it.home.top + it.home.height / 2;
+          held = {
+            it: it, box: b, pointerId: e.pointerId,
+            dx: cx - e.clientX, dy: cy - e.clientY,      // 指とピースのまん中の ずれ（ずれを保って ついてくる）
+            sx: e.clientX, sy: e.clientY, t0: Date.now(),
+            moved: false, near: null,
+            vx: cx, vy: cy - o.lift.up
+          };
+          setState(it, "held");
+          lift(b);
+          watch(true);
+          o.onGrab(it.data);
+        }
+
+        // ----- window で受け取る（持っているあいだだけ） -----
+        function onMove(e) {
+          if (!held || e.pointerId !== held.pointerId) return;
+          // マウスで、ボタンをもう はなしているとき（window の外ではなして、知らせが来なかった）は、静かに戻す
+          if (e.pointerType === "mouse" && e.buttons === 0) { cancel(); return; }
+          var h = held;
+          var p = visibleCenter(h, e.clientX, e.clientY);
+          h.vx = p.x;
+          h.vy = p.y;
+          if (!h.moved && dist(e.clientX, e.clientY, h.sx, h.sy) >= o.tapMove) h.moved = true;
+          if (!frame) frame = requestAnimationFrame(writeBox);   // 1コマに1回だけ書く
+          if (h.moved) updateNear();                            // 判定は、ドラッグが始まってから
+        }
+        function onUp(e) {
+          if (!held || e.pointerId !== held.pointerId) return;
+          if (e.pointerType === "mouse" && e.button !== 0) return;
+          release();
+        }
+        function onCancelEvent(e) {
+          if (held && e.pointerId === held.pointerId) cancel();
+        }
+        function onAnyCancel() { cancel(); }
+        function onVisibility() { if (document.hidden) cancel(); }
+        function watch(on) {
+          var m = on ? "addEventListener" : "removeEventListener";
+          window[m]("pointermove", onMove);
+          window[m]("pointerup", onUp);
+          window[m]("pointercancel", onCancelEvent);
+          window[m]("blur", onAnyCancel);
+          window[m]("pagehide", onAnyCancel);
+          document[m]("visibilitychange", onVisibility);
+        }
+
+        // ----- はなしたとき：さわっただけ → はまる → ちがう → 外 の順に調べる -----
+        function release() {
+          var h = held;
+          flush();
+          var it = h.it;
+          var data = it.data;
+          var tapLike = !h.moved && (Date.now() - h.t0) < o.tapTime;
+          var tg = null;
+          if (!tapLike && h.near) {
+            // 場所が まだ空いているか確かめる（ほかのピースが すいこまれていたら、はまらない）
+            var list = o.targets(data);
+            for (var i = 0; i < list.length; i++) {
+              if (list[i].id === h.near.id) tg = list[i];
+            }
+          }
+          watch(false);
+          held = null;
+          if (tapLike) {
+            startReturn(it, h.box, "tap");
+          } else if (tg) {
+            startSnap(it, h.box, tg);
+          } else {
+            if (h.near) o.onNear(data, null);
+            if (o.isMissZone(h.vx, h.vy)) o.onMiss(data);
+            else o.onOutside(data);
+            startReturn(it, h.box, "back");
+          }
+          o.onRelease(data);
+        }
+
+        // ----- 台へ戻る -----
+        function finishReturn(it) {
+          var back = it.back;
+          it.back = null;
+          clearTimeout(it.timer);
+          it.timer = null;
+          seat(it);                          // 絵を台へ戻してから、持つ箱を外す
+          if (back) rm(back.box.outer);
+          it.itemEl.style.opacity = "";
+          it.itemEl.style.transition = "";
+          setState(it, "tray");
+        }
+        function startReturn(it, b, style) {
+          clearTimeout(it.timer);
+          it.back = { box: b };
+          setState(it, "back");
+          var tapped = style === "tap";
+          if (o.reduced()) {
+            if (tapped) {                    // すぐ台に戻す。ぴょん はしない
+              finishReturn(it);
+              o.onTap(it.data);
+              return;
+            }
+            // その場で 0.15秒で ふわっと消え、台の上に 0.15秒で ふわっと出る（合わせて 0.3秒）
+            b.outer.style.transition = "opacity " + REDUCED_FADE + "ms linear";
+            b.outer.style.opacity = "0";
+            it.timer = setTimeout(function () {
+              finishReturn(it);
+              setState(it, "back");
+              it.itemEl.style.opacity = "0";
+              void it.itemEl.offsetWidth;
+              it.itemEl.style.transition = "opacity " + REDUCED_FADE + "ms linear";
+              it.itemEl.style.opacity = "1";
+              it.timer = setTimeout(function () {
+                it.timer = null;
+                it.itemEl.style.transition = "";
+                it.itemEl.style.opacity = "";
+                setState(it, "tray");
+              }, REDUCED_FADE);
+            }, REDUCED_FADE);
+            return;
+          }
+          var ms = tapped ? o.tapBack : o.returnTime;
+          var ease = tapped ? "ease-out" : "cubic-bezier(0.34, 1.4, 0.64, 1)";
+          b.shadow.style.opacity = "0";
+          b.outer.style.transition = "transform " + ms + "ms " + ease;
+          b.inner.style.transition = "transform " + ms + "ms " + ease;
+          void b.outer.offsetWidth;
+          b.outer.style.transform = "translate(" + it.home.left + "px," + it.home.top + "px)";
+          b.inner.style.transform = "translateY(0px) scale(1)";
+          it.timer = setTimeout(function () {
+            finishReturn(it);
+            if (tapped) o.onTap(it.data);
+          }, ms);
+        }
+
+        // ----- すいこまれる（ぴたっ） -----
+        function startSnap(it, b, tg) {
+          clearTimeout(it.timer);
+          setState(it, "snap");
+          it.snap = { box: b, target: tg };
+          o.onSnapStart(it.data, tg);        // ここで その場所を「すいこみ中」にして、候補から外す
+          if (o.reduced()) {
+            // 動かさない。0.15秒で ふわっと消えて、消えた時刻に くるまの部品を出す
+            b.outer.style.transition = "opacity " + REDUCED_FADE + "ms linear";
+            b.outer.style.opacity = "0";
+            it.timer = setTimeout(function () { finishSnap(it); }, REDUCED_FADE);
+            return;
+          }
+          var r = tg.rect;
+          var x = r.left + (r.width - it.home.width) / 2;
+          var y = r.top + (r.height - it.home.height) / 2;
+          var ease = "transform " + o.snapTime + "ms ease-out";
+          b.shadow.style.opacity = "0";
+          b.outer.style.transition = ease;
+          b.inner.style.transition = ease;
+          void b.outer.offsetWidth;
+          b.outer.style.transform = "translate(" + x + "px," + y + "px)";
+          b.inner.style.transform = "translateY(0px) scale(1)";
+          it.timer = setTimeout(function () { finishSnap(it); }, o.snapTime);
+        }
+        function finishSnap(it) {
+          clearTimeout(it.timer);
+          it.timer = null;
+          var s = it.snap;
+          if (!s) return;
+          it.snap = null;
+          rm(it.itemEl);                     // 持つ箱の絵を、ページから外す（台は からっぽで残る）
+          rm(s.box.outer);
+          setState(it, "placed");
+          o.onSnap(it.data, s.target);       // ここが「はまった時刻」
+        }
+
+        // ----- 取り消し：音なし・数えずに、静かに戻す -----
+        function cancel() {
+          if (!held) return;
+          if (o.reduced()) { quietNow(); return; }   // 動きを減らす設定：すぐ台に戻す
+          var h = held;
+          flush();
+          watch(false);
+          held = null;
+          if (h.near) o.onNear(h.it.data, null);
+          o.onCancel(h.it.data);
+          startReturn(h.it, h.box, "back");
+          o.onRelease(h.it.data);
+        }
+        // すぐ戻す（動きなし）
+        function quietNow() {
+          if (!held) return;
+          var h = held;
+          if (frame) {
+            cancelAnimationFrame(frame);
+            frame = 0;
+          }
+          watch(false);
+          held = null;
+          if (h.near) o.onNear(h.it.data, null);
+          var it = h.it;
+          clearTimeout(it.timer);
+          seat(it);
+          rm(h.box.outer);
+          setState(it, "tray");
+          o.onCancel(it.data);
+          o.onRelease(it.data);
+        }
+
+        // ----- 画面の大きさが変わったとき：動きなしで、すぐ そろえる（場面は進めない） -----
+        function settle() {
+          quietNow();
+          for (var i = 0; i < items.length; i++) {
+            var it = items[i];
+            if (it.state === "back") {
+              if (it.back && it.back.box) it.back.box.outer.style.transition = "none";
+              finishReturn(it);              // 戻る途中 → すぐ台へ（つかめない時間も終わり）
+            } else if (it.state === "snap") {
+              finishSnap(it);                // すいこみ中 → すぐ はめる
+            }
+          }
+        }
+
+        return {
+          // 台（つかめる四角）・運ぶ絵・台の中の置き場所 を登録する
+          add: function (plateEl, itemEl, home, data) {
+            var it = { plateEl: plateEl, itemEl: itemEl, home: home, data: data, state: "tray", timer: null, snap: null, back: null };
+            items.push(it);
+            setState(it, "tray");
+            seat(it);
+            return it;
+          },
+          remove: function (plateEl) {
+            var it = find(plateEl);
+            if (!it) return;
+            if (held && held.it === it) {
+              watch(false);
+              if (frame) { cancelAnimationFrame(frame); frame = 0; }
+              rm(held.box.outer);
+              held = null;
+            }
+            clearTimeout(it.timer);
+            if (it.snap) rm(it.snap.box.outer);
+            if (it.back) rm(it.back.box.outer);
+            items.splice(items.indexOf(it), 1);
+          },
+          updateHome: function (plateEl, home) {
+            var it = find(plateEl);
+            if (!it) return;
+            it.home = home;
+            if (it.state === "tray") seat(it);
+          },
+          // さわった瞬間に、ゲームの onTap から最初に渡す。台に当たれば true、当たらなければ false
+          handleDown: function (e) {
+            // 前の指のつづき（pointerup）が来なかったとき：どこをさわっても、すぐ戻す
+            // （2本目の指は、共通の部品の onTap で除かれているので、ここには来ない）
+            if (held && held.pointerId !== e.pointerId) quietNow();
+            var it = hit(e.clientX, e.clientY);
+            if (!it) return false;
+            if (held) return true;           // 同じ指の、重なった知らせ
+            if (it.state === "back") return true;     // 戻る途中の台：何も起きない
+            if (it.state !== "tray") return false;    // からっぽの台は、背景と同じ
+            if (!o.canGrab(it.data)) return false;
+            grab(it, e);
+            return true;
+          },
+          settle: settle,
+          cancel: cancel,
+          isHolding: function () { return !!held; }
+        };
+      }
+
+      // =====================================================
+      // 上の文字の入れかえ（ふだん：「くるまを つくろう」／全部はまったあいだ：くるまの名前）
+      //   opacity だけを なめらかに変える（消える → 入れかえ → 出る の1往復。点滅しない）。
+      //   動きを減らす設定では、すぐ入れかえる。いまの文字の種類を data-showing に書く
+      // =====================================================
+      var msgTimer = null;
+      var msgFadeTimer = null;
+
+      // 文字が1行に入る大きさに、小さくする（入るときは CSS の大きさのまま）
+      function fitMessage() {
+        message.style.fontSize = "";
+        var cs = window.getComputedStyle(message);
+        var avail = message.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 8;
+        var range = document.createRange();
+        range.selectNodeContents(message);
+        var w = range.getBoundingClientRect().width;
+        if (avail > 0 && w > avail) {
+          message.style.fontSize = Math.max(MIN_MSG_FONT, Math.floor(parseFloat(cs.fontSize) * avail / w * 10) / 10) + "px";
+        }
+      }
+      function swapMessage(text, kind) {
+        message.textContent = text;
+        message.setAttribute("data-showing", kind);
+        fitMessage();
+        if (reduced()) {
+          message.style.transition = "none";
+          message.style.opacity = "1";
+        } else {
+          message.style.transition = "opacity " + MSG_FADE + "ms ease";
+          message.style.opacity = "1";
+        }
+      }
+      // くるまの名前に入れかえる（まず消えて、入れかえてから出る）
+      function showNameMessage(name) {
+        clearTimeout(msgTimer);
+        clearTimeout(msgFadeTimer);
+        if (reduced()) {
+          swapMessage(name, "name");
+          return;
+        }
+        message.style.transition = "opacity " + MSG_FADE + "ms ease";
+        message.style.opacity = "0";
+        msgTimer = setTimeout(function () {
+          swapMessage(name, "name");
+        }, MSG_FADE);
+      }
+      // 走りさる終わりの 0.25秒前から、名前を消し始める（走りさったとき、消え終わっているように）
+      function startFadeOutMessage(runMs) {
+        clearTimeout(msgFadeTimer);
+        if (reduced()) return;
+        msgFadeTimer = setTimeout(function () {
+          message.style.transition = "opacity " + MSG_FADE + "ms ease";
+          message.style.opacity = "0";
+        }, Math.max(0, runMs - MSG_FADE));
+      }
+      function showTitleMessage() {
+        clearTimeout(msgTimer);
+        clearTimeout(msgFadeTimer);
+        swapMessage(TITLE_TEXT, "title");
+      }
+
+      // =====================================================
+      // 並べ方の計算
+      //   くるまの置き場所は2つ（縦ならび：くるまが上・トレーが下／横ならび：くるまが左・トレーが右）、
+      //   トレーの形は3つ（T1：1段／T2：1段目に いちばん横長のピースだけ、2段目に のこり／T3：1段で、タイヤ2つを縦に積む）。
+      //   6通りを、くるまの率 ks の大きい方から順に調べて、はじめに入るものを選ぶ（同じ率なら 表の上から）。
+      //   浮いただけで はまらないように、台の上で浮いた形のまん中から 同じ種類の場所のまん中まで、
+      //   R ＋ TAP_MOVE ＋ 12px 以上あける（足りなければ、くるまとトレーのあいだを広げる）
+      //   P ＝ { carWidth, pieces: [{ kind, vw, vh }], slots: [{ kind, cx, cy, long }] }（大きさはくるまの座標）
+      // =====================================================
+      var COMBOS = [["below", "T1"], ["below", "T2"], ["below", "T3"], ["right", "T1"], ["right", "T2"], ["right", "T3"]];
+
+      // ピースの並び順を、形に当てはめる：段ごとの「場所（1つ以上の台）」の並びを返す
+      function makeRows(pieces, shape) {
+        var n = pieces.length;
+        var idx = [];
+        var i;
+        for (i = 0; i < n; i++) idx.push(i);
+        var cells = function (list) {
+          var out = [];
+          for (var k = 0; k < list.length; k++) out.push([list[k]]);
+          return out;
+        };
+        if (shape === "T2") {
+          var a = 0;                       // いちばん横はばが大きいピース（A）
+          for (i = 1; i < n; i++) {
+            if (pieces[i].vw > pieces[a].vw) a = i;
+          }
+          var rest = [];
+          for (i = 0; i < n; i++) {
+            if (i !== a) rest.push(i);
+          }
+          return rest.length ? [[[a]], cells(rest)] : [[[a]]];
+        }
+        if (shape === "T3") {
+          var tires = [];
+          for (i = 0; i < n; i++) {
+            if (pieces[i].kind === "tire") tires.push(i);
+          }
+          if (tires.length >= 2) {
+            // 2つ目のタイヤは、1つ目のタイヤの場所の下に積む
+            var row = [];
+            for (i = 0; i < n; i++) {
+              if (i === tires[1]) continue;
+              row.push(i === tires[0] ? [tires[0], tires[1]] : [i]);
+            }
+            return [row];
+          }
+        }
+        return [cells(idx)];
+      }
+
+      function arrange(P, place, shape, ks, aw, ah, top, extra) {
+        var n = P.pieces.length;
+        var pl = [];
+        var i, r, c, m;
+        for (i = 0; i < n; i++) {
+          pl.push({
+            w: Math.max(GRAB_MIN, P.pieces[i].vw * ks + GRAB_PAD * 2),
+            h: Math.max(GRAB_MIN, P.pieces[i].vh * ks + GRAB_PAD * 2)
+          });
+        }
+        var rows = makeRows(P.pieces, shape);
+        var rowInfo = [];
+        var trayW = 0;
+        var trayH = 0;
+        for (r = 0; r < rows.length; r++) {
+          var cells = [];
+          var rw = 0;
+          var rh = 0;
+          for (c = 0; c < rows[r].length; c++) {
+            var cell = rows[r][c];
+            var cw = 0;
+            var ch = 0;
+            for (m = 0; m < cell.length; m++) {
+              cw = Math.max(cw, pl[cell[m]].w);
+              ch += pl[cell[m]].h;
+            }
+            ch += TRAY_GAP * (cell.length - 1);
+            cells.push({ idx: cell, w: cw, h: ch });
+            rw += cw;
+            rh = Math.max(rh, ch);
+          }
+          rw += TRAY_GAP * (cells.length - 1);
+          rowInfo.push({ cells: cells, w: rw, h: rh });
+          trayW = Math.max(trayW, rw);
+          trayH += rh;
+        }
+        trayH += TRAY_GAP * (rows.length - 1);
+
+        var carW = FRAME_W * ks;
+        var carH = FRAME_H * ks;
+        var carX;
+        var carTop;
+        var trayLeft;
+        var trayTop;
+        var fits;
+        // 棚（トレー全体を囲む1枚の木の板）の張り出し SHELF_PAD も、外寸に含める
+        var tw = trayW + SHELF_PAD * 2;
+        var th = trayH + SHELF_PAD * 2;
+        if (place === "below") {
+          var blockH = carH + VGAP + extra + th;
+          fits = carW <= aw + 0.01 && tw <= aw + 0.01 && blockH <= ah + 0.01;
+          var blockTop = top + Math.max(0, (ah - blockH) / 2);
+          carX = EDGE_SAFE + (aw - carW) / 2;
+          carTop = blockTop;
+          trayLeft = EDGE_SAFE + (aw - tw) / 2 + SHELF_PAD;
+          trayTop = blockTop + carH + VGAP + extra + SHELF_PAD;
+        } else {
+          var blockW = carW + HGAP + extra + tw;
+          fits = blockW <= aw + 0.01 && carH <= ah + 0.01 && th <= ah + 0.01;
+          var blockLeft = EDGE_SAFE + Math.max(0, (aw - blockW) / 2);
+          carX = blockLeft;
+          carTop = top + Math.max(0, (ah - carH) / 2);
+          trayLeft = blockLeft + carW + HGAP + extra + SHELF_PAD;
+          trayTop = top + Math.max(0, (ah - th) / 2) + SHELF_PAD;
+        }
+
+        // 台の場所（各段は トレーの横のまん中に寄せ、段の中の台は 段の高さのまん中にそろえる）
+        var plates = [];
+        var rowRects = [];
+        var y = trayTop;
+        for (r = 0; r < rowInfo.length; r++) {
+          var row = rowInfo[r];
+          var x = trayLeft + (trayW - row.w) / 2;
+          rowRects.push({ left: x, top: y, w: row.w, h: row.h });
+          for (c = 0; c < row.cells.length; c++) {
+            var cl = row.cells[c];
+            var py = y + (row.h - cl.h) / 2;
+            for (m = 0; m < cl.idx.length; m++) {
+              var k = cl.idx[m];
+              plates[k] = { left: x + (cl.w - pl[k].w) / 2, top: py, w: pl[k].w, h: pl[k].h };
+              py += pl[k].h + TRAY_GAP;
+            }
+            x += cl.w + TRAY_GAP;
+          }
+          y += row.h + TRAY_GAP;
+        }
+
+        // 浮いただけで はまらないか：台の上で浮いた形のまん中 から 同じ種類の場所のまん中 まで、R ＋ 22px 以上
+        var sx0 = carX + ((FRAME_W - P.carWidth) / 2) * ks;
+        var distOk = true;
+        for (i = 0; i < n && distOk; i++) {
+          if (!plates[i]) continue;
+          var px = plates[i].left + plates[i].w / 2;
+          var py2 = plates[i].top + plates[i].h / 2 - LIFT_UP;
+          for (var s = 0; s < P.slots.length; s++) {
+            var sl = P.slots[s];
+            if (sl.kind !== P.pieces[i].kind) continue;
+            var R = Math.max(SNAP_MIN, sl.long * ks * SNAP_K);
+            if (dist(px, py2, sx0 + sl.cx * ks, carTop + sl.cy * ks) < R + TAP_MOVE + 12) { distOk = false; break; }
+          }
+        }
+        return {
+          ks: ks, place: place, shape: shape, extra: extra, fits: fits, distOk: distOk,
+          carX: carX, carTop: carTop, carW: carW, carH: carH,
+          trayLeft: trayLeft, trayTop: trayTop, trayW: trayW, trayH: trayH,
+          plates: plates, rows: rowRects
+        };
+      }
+
+      function computeLayout(P, W, H, top, bottom) {
+        var aw = W - EDGE_SAFE * 2;
+        var ah = H - top - bottom;
+        var kMax = Math.round(CAR_MAX * 100);
+        var kMin = Math.round(CAR_MIN * 100);
+        for (var k = kMax; k >= kMin; k--) {
+          var ks = k / 100;
+          for (var c = 0; c < COMBOS.length; c++) {
+            var g = arrange(P, COMBOS[c][0], COMBOS[c][1], ks, aw, ah, top, 0);
+            if (!g.fits) continue;
+            if (!g.distOk) {
+              var ok = false;
+              for (var ex = 2; ex <= MAX_EXTRA; ex += 2) {
+                g = arrange(P, COMBOS[c][0], COMBOS[c][1], ks, aw, ah, top, ex);
+                if (!g.fits) break;
+                if (g.distOk) { ok = true; break; }
+              }
+              if (!ok) continue;
+            }
+            g.W = W;
+            g.H = H;
+            g.top = top;
+            return g;
+          }
+        }
+        // どれも入らないとき（ふつうは起きない）：いちばん小さい率で並べる
+        var f = arrange(P, "below", "T2", CAR_MIN, aw, ah, top, 0);
+        f.W = W;
+        f.H = H;
+        f.top = top;
+        return f;
+      }
+
+      // =====================================================
+      // くるまと、ピースと、はめる場所を作る
+      // =====================================================
+      function clearStage() {
+        if (!cur) return;
+        for (var i = 0; i < cur.pieces.length; i++) drag.remove(cur.pieces[i].plate);
+        while (tray.firstChild) tray.removeChild(tray.firstChild);
+        rm(cur.el);
+        cur = null;
+      }
+
+      // ピース1つの運ぶ絵：そのピースの部品だけを出す（タイヤは、その番号の1つだけ）
+      function makePiece(id, spec, order, rect) {
+        var pc = K.cars.create(id);
+        var svg = pc.el;
+        svg.classList.add("part-only");
+        var keep;
+        if (spec.kind === "tire") keep = [svg.querySelectorAll('[data-part="tire"]')[spec.index]];
+        else keep = partEls(svg, spec.parts);
+        for (var i = 0; i < keep.length; i++) {
+          if (keep[i]) keep[i].classList.add("part-keep");
+        }
+        var vw = rect.w + PAD * 2;
+        var vh = rect.h + PAD * 2;
+        svg.setAttribute("viewBox", (rect.x - PAD) + " " + (rect.y - PAD) + " " + vw + " " + vh);
+
+        var plate = div("piece-plate");       // 部品の台（この四角が、つかめる四角）
+        plate.setAttribute("data-index", String(order));
+        plate.setAttribute("data-empty", "false");
+        plate.setAttribute("data-glow", "false");
+        var el = div("piece");                // 運ぶ絵（持つ箱へ移るのは、この箱ごと）
+        el.setAttribute("data-kind", spec.kind);
+        el.setAttribute("data-index", String(order));
+        el.setAttribute("data-state", "tray");
+        var hopEl = div("piece-hop kuruma-hop");   // はねる箱（ぴょん・えらんでね）
+        hopEl.appendChild(svg);
+        el.appendChild(hopEl);
+        plate.appendChild(el);
+        return {
+          kind: spec.kind, spec: spec, order: order, rect: rect, vw: vw, vh: vh,
+          plate: plate, el: el, hopEl: hopEl, svg: svg, hopper: K.stage.hopper(hopEl),
+          home: { left: 0, top: 0, width: 0, height: 0 },
+          placed: false, drag: null, slot: null
+        };
+      }
+
+      // くるま1台ぶんの舞台を作る（古いものは外す）
+      function buildStage(q) {
+        clearStage();
+        token++;
+        var id = q.car;
+        var rects = ensureMeasured(id);
+
+        var car = K.cars.create(id);
+        var el = document.createElement("div");           // 横の箱
+        el.id = "target";
+        var frame = div("car-frame");                      // 大きさの箱
+        var hop = div("kuruma-hop");                       // はねる箱
+        var shake = div("car-shake");                      // エンジンの ゆれの箱
+        car.el.style.left = ((FRAME_W - car.width) / 2) + "px";   // 枠の横のまん中
+        shake.appendChild(car.el);
+        hop.appendChild(shake);
+        frame.appendChild(hop);
+        el.appendChild(frame);
+        stage.insertBefore(el, tray);
+
+        cur = {
+          id: id, car: car, el: el, frame: frame, hop: hop, shake: shake,
+          hopper: K.stage.hopper(hop), mover: K.stage.mover(el),
+          pieces: [], slots: []
+        };
+
+        var tires = car.el.querySelectorAll('[data-part="tire"]');
+        for (var i = 0; i < q.pieces.length; i++) {
+          var spec = q.pieces[i];
+          var rect = rects[specKey(spec)];
+
+          // はめる場所：くるまの絵の、その部品を うすい形にする（2つ目からの data-part と、いっしょに かくす部品は かくす）
+          var slotEls = spec.kind === "tire" ? [tires[spec.index]] : partEls(car.el, [spec.parts[0]]);
+          var j;
+          for (j = 0; j < slotEls.length; j++) {
+            if (slotEls[j]) slotEls[j].classList.add("part-slot");
+          }
+          var missEls = partEls(car.el, spec.parts.slice(1).concat(spec.withParts));
+          for (j = 0; j < missEls.length; j++) missEls[j].classList.add("part-missing");
+          var slot = {
+            id: "slot" + i, kind: spec.kind, el: slotEls[0], extra: slotEls, miss: missEls,
+            rect: rect, fill: "empty", near: false, hint: false
+          };
+          slot.el.setAttribute("data-slot-kind", spec.kind);
+          slot.el.setAttribute("data-slot-state", "empty");
+          cur.slots.push(slot);
+
+          var piece = makePiece(id, spec, i, rect);
+          piece.slot = slot;
+          cur.pieces.push(piece);
+          tray.appendChild(piece.plate);
+          piece.drag = drag.add(piece.plate, piece.el, piece.home, piece);
+        }
+
+        misses = 0;
+        idleUsed = false;
+        setHint(null, "off");
+        refreshBody();
+        body.setAttribute("data-held", "");
+      }
+
+      // 画面の大きさから並べ方を計算して、書く
+      function doLayout() {
+        var W = window.innerWidth;
+        var H = window.innerHeight;
+        var P = { carWidth: cur.car.width, pieces: [], slots: [] };
+        var i;
+        for (i = 0; i < cur.pieces.length; i++) {
+          P.pieces.push({ kind: cur.pieces[i].kind, vw: cur.pieces[i].vw, vh: cur.pieces[i].vh });
+        }
+        for (i = 0; i < cur.slots.length; i++) {
+          var s = cur.slots[i];
+          P.slots.push({
+            kind: s.kind,
+            cx: s.rect.x + s.rect.w / 2, cy: s.rect.y + s.rect.h / 2,
+            long: Math.max(s.rect.w, s.rect.h) + PAD * 2
+          });
+        }
+        L = computeLayout(P, W, H, topGap(), bottomGap());
+        applyLayout();
+      }
+      function applyLayout() {
+        var g = L;
+        var ks = g.ks;
+        var i;
+        // くるま
+        cur.el.style.top = g.carTop + "px";
+        cur.el.style.width = g.carW + "px";
+        cur.el.style.height = g.carH + "px";
+        cur.frame.style.transform = "scale(" + ks + ")";
+        // 床の上のはしは、くるまのタイヤの少し上
+        scenery.style.setProperty("--floor", (g.carTop + 186 * ks) + "px");
+        // トレー
+        tray.style.left = g.trayLeft + "px";
+        tray.style.top = g.trayTop + "px";
+        tray.style.width = g.trayW + "px";
+        tray.style.height = g.trayH + "px";
+        tray.setAttribute("data-shape", g.shape);
+        tray.setAttribute("data-place", g.place);
+        var olds = tray.querySelectorAll(".shelf");
+        for (i = 0; i < olds.length; i++) rm(olds[i]);
+        // 棚は、トレー全体を囲む1枚だけ（段どうしで重ならない）
+        var sh = div("shelf");
+        sh.style.left = (-SHELF_PAD) + "px";
+        sh.style.top = (-SHELF_PAD) + "px";
+        sh.style.width = (g.trayW + SHELF_PAD * 2) + "px";
+        sh.style.height = (g.trayH + SHELF_PAD * 2) + "px";
+        tray.insertBefore(sh, tray.firstChild);
+        // 部品の台と、ピース
+        for (i = 0; i < cur.pieces.length; i++) {
+          var p = cur.pieces[i];
+          var pl = g.plates[i];
+          var pw = p.vw * ks;
+          var ph = p.vh * ks;
+          p.plate.style.left = (pl.left - g.trayLeft) + "px";
+          p.plate.style.top = (pl.top - g.trayTop) + "px";
+          p.plate.style.width = pl.w + "px";
+          p.plate.style.height = pl.h + "px";
+          p.el.style.width = pw + "px";
+          p.el.style.height = ph + "px";
+          p.svg.setAttribute("width", pw);
+          p.svg.setAttribute("height", ph);
+          p.home = { left: pl.left + (pl.w - pw) / 2, top: pl.top + (pl.h - ph) / 2, width: pw, height: ph };
+          drag.updateHome(p.plate, p.home);
+        }
+      }
+      function placeCar() {
+        cur.mover.moveTo(L.carX, 0);
+      }
+
+      // はめる場所の、画面の四角（くるまの座標を、くるまの画面の四角に重ねて出す）
+      function slotScreenRect(slot) {
+        var ks = L.ks;
+        var sx = L.carX + ((FRAME_W - cur.car.width) / 2) * ks;
+        return {
+          left: sx + (slot.rect.x - PAD) * ks,
+          top: L.carTop + (slot.rect.y - PAD) * ks,
+          width: (slot.rect.w + PAD * 2) * ks,
+          height: (slot.rect.h + PAD * 2) * ks
+        };
+      }
+      // ピースを はめてよい、空いた場所の一覧（すいこみ中・はまった場所は入れない）
+      function slotTargets(piece) {
+        var out = [];
+        for (var i = 0; i < cur.slots.length; i++) {
+          var s = cur.slots[i];
+          if (s.kind !== piece.kind || s.fill !== "empty") continue;
+          var r = slotScreenRect(s);
+          out.push({
+            id: s.id, slot: s, rect: r,
+            center: { x: r.left + r.width / 2, y: r.top + r.height / 2 },
+            radius: Math.max(SNAP_MIN, Math.max(r.width, r.height) * SNAP_K)
+          });
+        }
+        return out;
+      }
+      function slotById(id) {
+        for (var i = 0; i < cur.slots.length; i++) {
+          if (cur.slots[i].id === id) return cur.slots[i];
+        }
+        return null;
+      }
+
+      // はめる場所の見た目（明るさ・印）を、状態から書く
+      function refreshSlot(s) {
+        var open = s.fill === "empty";
+        for (var i = 0; i < s.extra.length; i++) {
+          if (!s.extra[i]) continue;
+          s.extra[i].classList.toggle("slot-near", open && s.near);
+          s.extra[i].classList.toggle("slot-hint", open && s.hint);
+        }
+        var st = s.fill !== "empty" ? s.fill : (s.near ? "near" : (s.hint ? "hint" : "empty"));
+        s.el.setAttribute("data-slot-state", st);
+      }
+      function setNear(slotId) {
+        if (!cur) return;
+        for (var i = 0; i < cur.slots.length; i++) {
+          var s = cur.slots[i];
+          var want = s.id === slotId;
+          if (s.near !== want) {
+            s.near = want;
+            refreshSlot(s);
+          }
+        }
+      }
+      function fillSlot(s) {
+        s.fill = "filled";
+        s.near = false;
+        s.hint = false;
+        for (var i = 0; i < s.extra.length; i++) {
+          if (s.extra[i]) s.extra[i].classList.remove("part-slot", "slot-near", "slot-hint");
+        }
+        for (var j = 0; j < s.miss.length; j++) s.miss[j].classList.remove("part-missing");
+        s.el.setAttribute("data-slot-state", "filled");
+      }
+
+      // =====================================================
+      // そっと教える光（光っているのは、いつも1つのピースだけ）
+      //   hintTarget ＝ 光らせるピース、hintReason ＝ 理由（miss・idle・finger）。
+      //   光を付ける・消すのは、この関数だけ。ピースの台と、同じ種類の空いた場所が ふわっと明るくなって、そのまま
+      // =====================================================
+      function setHint(p, reason) {
+        if (p && hintTarget === p) {
+          hintReason = reason;
+          return;
+        }
+        var i;
+        if (hintTarget && cur) {
+          hintTarget.plate.setAttribute("data-glow", "false");
+          for (i = 0; i < cur.slots.length; i++) {
+            if (cur.slots[i].hint) {
+              cur.slots[i].hint = false;
+              refreshSlot(cur.slots[i]);
+            }
+          }
+        }
+        hintTarget = p;
+        hintReason = p ? reason : "off";
+        if (p && cur) {
+          p.plate.setAttribute("data-glow", "true");
+          for (i = 0; i < cur.slots.length; i++) {
+            if (cur.slots[i].kind === p.kind && cur.slots[i].fill === "empty") {
+              cur.slots[i].hint = true;
+              refreshSlot(cur.slots[i]);
+            }
+          }
+        }
+        body.setAttribute("data-hint", p ? "glow" : "off");
+      }
+
+      // しばらく動かさない：2台目から、8秒たったら、並びの先頭の まだのピースを光らせる（1台に1回だけ）
+      function stopIdle() {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+      }
+      function restartIdle() {
+        stopIdle();
+        if (carNo === 0 || idleUsed || scene !== "build" || (drag && drag.isHolding())) return;
+        idleTimer = setTimeout(fireIdle, NUDGE_TIME);
+      }
+      function fireIdle() {
+        idleTimer = null;
+        if (scene !== "build" || idleUsed || !cur || drag.isHolding()) return;
+        idleUsed = true;                        // 2回ちがった光が出ていても、この1回は使ったことにする
+        if (hintReason === "miss") return;
+        for (var i = 0; i < cur.pieces.length; i++) {
+          var p = cur.pieces[i];
+          if (!p.placed && p.drag.state !== "snap") {
+            setHint(p, "idle");
+            return;
+          }
+        }
+      }
+
+      // =====================================================
+      // 指マーク（1台目だけ）：荷台の台から、荷台の はめる場所まで「スーッと運ぶ」
+      // =====================================================
+      var hintTimer = K.touch.hintTimer(function () {
+        // 5秒さわらなかったら、また出す（2回ちがった光が出ているあいだは、出さない）
+        if (carNo !== 0 || fingerDone || scene !== "build" || !cur || drag.isHolding()) return;
+        if (hintReason === "miss") return;
+        showFinger();
+      });
+      function bedPiece() {
+        if (!cur) return null;
+        for (var i = 0; i < cur.pieces.length; i++) {
+          if (cur.pieces[i].kind === "bed") return cur.pieces[i];
+        }
+        return null;
+      }
+      // 出発（荷台の台のまん中）と行き先（荷台の場所のまん中）の両方で、上の文字・ボタンに重ならないようにする
+      function placeFinger() {
+        if (!finger || !cur || carNo !== 0 || fingerDone || !L) return;
+        var p = bedPiece();
+        if (!p) return;
+        var sx = p.home.left + p.home.width / 2;
+        var sy = p.home.top + p.home.height / 2;
+        var r = slotScreenRect(p.slot);
+        var tx = r.left + r.width / 2;
+        var ty = r.top + r.height / 2;
+        var avoid = [message, homeBtn, muteBtn];
+        var f1 = K.touch.hintFit(sx, sy, avoid);
+        var f2 = K.touch.hintFit(tx, ty, avoid);
+        var scale = Math.min(f1.scale, f2.scale);
+        var drop = Math.max(f1.drop, f2.drop);
+        finger.style.setProperty("--hs", scale);
+        finger.style.setProperty("--dx", (tx - sx) + "px");
+        finger.style.setProperty("--dy", (ty - sy) + "px");
+        finger.style.left = (sx - K.touch.HINT_TIP_X * scale) + "px";
+        finger.style.top = (sy - K.touch.HINT_HEIGHT * scale + drop) + "px";
+      }
+      function showFinger() {
+        if (!finger || fingerDone) return;
+        var p = bedPiece();
+        if (!p || p.placed) return;
+        placeFinger();
+        K.touch.showHint(finger);
+        setHint(p, "finger");
+      }
+      function hideFinger() {
+        if (!finger) return;
+        K.touch.hideHint(finger);
+        if (hintReason === "finger") setHint(null, "off");
+      }
+
+      // =====================================================
+      // ドラッグの部品を、ゲームにつなぐ
+      // =====================================================
+      function allHops() {
+        var list = [];
+        if (!cur) return list;
+        for (var i = 0; i < cur.pieces.length; i++) list.push(cur.pieces[i].hopEl);
+        return list;
+      }
+      // えらんでね：まだ台にあるピースが、並び順に小さくはねる（音なし。「ちがう」に数えない）
+      function nudgePieces() {
+        var list = [];
+        if (!cur) return;
+        for (var i = 0; i < cur.pieces.length; i++) {
+          var p = cur.pieces[i];
+          if (!p.placed && p.drag.state === "tray") list.push(p.hopEl);
+        }
+        C.nudge(list);
+      }
+      // はまった場所に、うすい黄色の輪（1回だけ）
+      function fitRing(slot) {
+        if (reduced()) return;
+        var r = slotScreenRect(slot);
+        var ring = div("fit-ring");
+        ring.style.left = r.left + "px";
+        ring.style.top = r.top + "px";
+        ring.style.width = r.width + "px";
+        ring.style.height = r.height + "px";
+        ring.addEventListener("animationend", function () { rm(ring); });
+        stage.appendChild(ring);
+        setTimeout(function () { rm(ring); }, 900);   // 念のため
+      }
+
+      drag = createDragger({
+        layer: heldLayer,
+        edge: EDGE_SAFE,
+        lift: { scale: LIFT_SCALE, up: LIFT_UP, time: LIFT_TIME },
+        tapMove: TAP_MOVE,
+        tapTime: TAP_TIME,
+        nearHyst: NEAR_HYST,
+        snapTime: SNAP_TIME,
+        returnTime: RETURN_TIME,
+        tapBack: TAP_BACK,
+        reduced: reduced,
+        canGrab: function (p) { return scene === "build" && !p.placed; },
+        targets: function (p) { return slotTargets(p); },
+        isMissZone: function (x, y) {
+          // くるまの枠（310 × 220 を ks 倍）の中か
+          return x >= L.carX && x <= L.carX + L.carW && y >= L.carTop && y <= L.carTop + L.carH;
+        },
+        onGrab: function (p) {
+          hideFinger();                    // つかんだら、指マークは消える
+          hintTimer.stop();
+          stopIdle();
+          C.stopNudge(allHops());
+          p.hopEl.classList.remove("hop");
+          body.setAttribute("data-held", p.kind);
+          // 音は鳴らさない（目で返事がわかる）
+        },
+        onNear: function (p, target) {
+          setNear(target ? target.id : null);
+        },
+        onSnapStart: function (p, target) {
+          // はなした瞬間に、その場所を「すいこみ中」にして、候補から外す
+          var s = slotById(target.id);
+          s.fill = "filling";
+          s.near = false;
+          s.hint = false;
+          refreshSlot(s);
+          p.targetSlot = s;
+          p.el.setAttribute("data-slot", s.id);
+        },
+        onSnap: function (p, target) {
+          // ここが「はまった時刻」：くるまの部品を出す
+          var s = slotById(target.id);
+          fillSlot(s);
+          p.placed = true;
+          if (carNo === 0) {
+            fingerDone = true;             // 操作がわかったので、指マークは二度と出さない
+            hideFinger();
+          }
+          setHint(null, "off");            // 光は消え、「ちがう」の数も 0 に戻る
+          misses = 0;
+          refreshBody();
+          if (!settling) fitRing(s);       // 画面の大きさが変わったときは、古い座標に出さない
+          if (allPlaced()) {
+            if (!settling) startDone();    // 画面の大きさが変わったときは、並べ直したあとに始める
+          } else {
+            K.sound.playArrive();          // 「ピポッ♪」
+          }
+        },
+        onMiss: function (p) {
+          K.sound.playPoyon();             // 「ぽよん」
+          misses++;
+          refreshBody();
+          if (misses >= 2) setHint(p, "miss");   // 2回ちがったら、最後にはなしたピースを光らせる
+        },
+        onOutside: function () {},         // 外で はなす：音なし・数えない
+        onCancel: function () {},          // 取り消し：音なし・数えない
+        onTap: function (p) {
+          if (!reduced()) p.hopper.hop();  // さわっただけ：台に戻り着いてから、小さく ぴょん
+        },
+        onRelease: function () {
+          body.setAttribute("data-held", "");
+          restartIdle();                   // はなした・取り消した瞬間から 8秒を数え直す
+          hintTimer.restart();
+        }
+      });
+
+      // =====================================================
+      // 画面のどこかに指がふれた瞬間
+      // （大人用のボタンへのタッチと、2本目からの指は、共通の部品が はぶいてくれる）
+      // =====================================================
+      K.touch.onTap(function (e) {
+        // マウスは左ボタンだけ。ほかのボタンは、ピースでも背景でも 何もしない
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        if (scene === "build") {
+          if (drag.handleDown(e)) return;     // ピースの台：つかむ（戻る途中の台は 何も起きない）
+          // 背景・くるま・はめる場所・からっぽの台：えらんでね
+          hideFinger();
+          hintTimer.restart();
+          nudgePieces();
+          restartIdle();
+          return;
+        }
+        // done・leave・enter：ピースはつかめない。くるまが「プッ」とはねる
+        K.sound.playHorn();
+        if (cur) cur.hopper.hop();
+      });
+      document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+      // =====================================================
+      // 全部はまった：ピポピン♪ → 仕事 → エンジン → 走りさる
+      // =====================================================
+      function startDone() {
+        if (scene !== "build" || !cur) return;
+        setScene("done");
+        stopIdle();
+        hintTimer.stop();
+        setHint(null, "off");
+        K.sound.playCorrect();                        // 「ピポピン♪」（最後のピースでは「ピポッ♪」は鳴らさない）
+        K.stage.confetti();                           // 紙ふぶき（動きを減らす設定では出ない）
+        showNameMessage(K.cars.get(cur.id).name);     // 上の文字を、くるまの名前に
+        if (!reduced()) cur.hopper.hop();             // くるまが「ぴょん」と1回はねる
+        tray.style.transition = "opacity " + TRAY_FADE + "ms ease";   // 部品の台が ふわっと消える
+        tray.style.opacity = "0";
+        var car = cur;
+        later(WORK_AT, function () {
+          car.car.work();                             // 仕事（はまった部品が そのまま動く）
+          car.car.sound();
+        });
+        later(ENGINE_AT, function () {
+          if (reduced()) return;                      // ゆれ・タイヤが回るのは しない（moving も付けない）
+          car.shake.classList.add("engine");
+          car.el.classList.add("moving");
+        });
+        later(LEAVE_AT, leave);
+      }
+
+      // 走りさる：右の画面の外へ。くるまの位置は、この時点の画面から計算し直す
+      function leave() {
+        if (!cur) return;
+        setScene("leave");
+        var time;
+        if (!reduced()) {
+          var step = Math.max(MIN_STEP, window.innerWidth / STEP_DIV);
+          var dx = Math.max(1, K.stage.exitX() - cur.mover.x);
+          time = Math.max(MIN_RUN_TIME, K.stage.timeFor(dx, step));
+          cur.mover.moveTo(K.stage.exitX(), time);
+        } else {
+          // 動きを減らす設定：走らず、その場で ふわっと消える
+          time = REDUCED_LEAVE;
+          cur.el.style.transition = "opacity " + REDUCED_LEAVE + "ms ease";
+          cur.el.style.opacity = "0";
+        }
+        K.sound.playDrive(time / 1000);               // 「ブーーン」
+        startFadeOutMessage(time);
+        later(time, startEnter);
+      }
+
+      // 次のくるま：左から入ってきて、部品の台とピースが ふわっと出る（終わりはない）
+      function startEnter() {
+        carNo++;
+        showTitleMessage();                           // 上の文字を「くるまを つくろう」に戻す
+        buildStage(factory.next());
+        setScene("enter");
+        tray.style.transition = "none";
+        tray.style.opacity = "0";
+        doLayout();
+        var car = cur;
+        if (!reduced()) {
+          car.mover.moveTo(K.stage.enterX(L.carW), 0);
+          void car.el.offsetWidth;
+          car.mover.moveTo(L.carX, ENTER_TIME);       // 音なし。タイヤが回る
+          later(TRAY_AT, function () {
+            tray.style.transition = "opacity " + TRAY_IN + "ms ease";
+            tray.style.opacity = "1";
+          });
+          later(ENTER_TOTAL, toBuild);
+        } else {
+          // 動きを減らす設定：くるま・台・ピースが その場所に ふわっと出る
+          placeCar();
+          car.el.style.opacity = "0";
+          void car.el.offsetWidth;
+          car.el.style.transition = "opacity " + REDUCED_ENTER + "ms ease";
+          car.el.style.opacity = "1";
+          tray.style.transition = "opacity " + REDUCED_ENTER + "ms ease";
+          tray.style.opacity = "1";
+          later(REDUCED_ENTER_TOTAL, toBuild);
+        }
+      }
+      function toBuild() {
+        if (!cur) return;
+        tray.style.transition = "";
+        tray.style.opacity = "";
+        cur.el.style.transition = "";
+        cur.el.style.opacity = "";
+        setScene("build");
+        // 入ってくるあいだに画面の大きさが変わっていたら、ここで並べ直す
+        if (L && (L.W !== window.innerWidth || L.H !== window.innerHeight)) {
+          doLayout();
+          placeCar();
+        }
+        restartIdle();
+      }
+
+      // =====================================================
+      // 画面の大きさ・回転が変わったとき（build のあいだだけ並べ直す）
+      //   ① 持つ箱にあるピースを、動きなしで すぐ そろえる（持っている→静かに戻す／戻る途中→すぐ台／
+      //      すいこみ中→すぐ はめる）② 新しい大きさで並べ直す ③ 全部はまっていたら、ここで done を始める
+      //   done・leave・enter のあいだは書きかえず、build に戻った直後に合わせ直す
+      // =====================================================
+      function relayout() {
+        fitMessage();
+        if (!cur || scene !== "build" || !L) return;
+        if (L.W === window.innerWidth && L.H === window.innerHeight && Math.abs(L.top - topGap()) < 0.5) {
+          placeFinger();
+          return;
+        }
+        settling = true;
+        drag.settle();
+        settling = false;
+        doLayout();
+        placeCar();
+        placeFinger();
+        if (allPlaced()) startDone();
+      }
+      K.touch.onViewportChange(relayout);
+      window.addEventListener("load", relayout);
+
+      // =====================================================
+      // 大人用のボタン
+      // =====================================================
+      // 音を消す・出すを切りかえたら、ボタンの大きさ（52px ↔ 64px）が変わるので、指マークの場所を合わせ直す
+      K.touch.setupMuteButton(muteBtn, function () {
+        placeFinger();
+        setTimeout(placeFinger, 250);
+      });
+      K.touch.setupHomeButton(homeBtn, HOME_URL);
+
+      // =====================================================
+      // テスト用の口：ページの外から出題器・測り方・並べ方を調べられる。子どもが触る部分には使わない
+      // =====================================================
+      window.__build = {
+        createFactory: createFactory,
+        CARS: CARS,
+        CAR_IDS: CAR_IDS,
+        measureParts: measureParts,
+        computeLayout: computeLayout,
+        state: function () { return { scene: scene, layout: L, carNo: carNo, misses: misses, hintReason: hintReason }; }
+      };
+
+      // =====================================================
+      // 最初の準備：1台目（ダンプカー・ピース2つ）は、もう並んでいる形で始める（入ってくる動きはしない）
+      // =====================================================
+      factory = createFactory(Math.random);
+      fitMessage();
+      buildStage(factory.next());
+      doLayout();
+      placeCar();
+      setScene("build");
+
+      // 指マーク：荷台の台から はめる場所へ運ぶ動き。ページを開いたときは出ている
+      finger = K.touch.createHint();
+      finger.classList.add("carry");
+      document.body.appendChild(finger);
+      showFinger();
+    })();
+  </script>
+
+</body>
+</html>

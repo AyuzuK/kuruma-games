@@ -114,11 +114,11 @@
       overflow: visible;             /* アームの先は絵の枠より少し上に出るので、切らずに見せる */
     }
 
-    /* ===== ボタンを6つ並べる =====
-       並べ方は4つ（縦1列 col／横1列 row／2列 grid／3列 grid3）。どれにするかは、下の JavaScript が
+    /* ===== ボタンを7つ並べる =====
+       並べ方は5つ（縦1列 col／横1列 row／2列 grid／3列 grid3／4列 grid4）。どれにするかは、下の JavaScript が
        画面の大きさから「いちばん大きく見える並べ方」を選んで、この箱の data-layout に書く
        （ボタンのあいだは どれも 24px）。
-       6つ並べて入らないときは、6つとも同じ率（--k、0.3〜1）で縮める。率も JavaScript が入れる。
+       7つ並べて入らないときは、7つとも同じ率（--k、0.3〜1）で縮める。率も JavaScript が入れる。
        ボタンそのものの大きさ・ゆれ・沈み方は変えずに、外がわの箱（.slot-inner）を縮める */
     .games {
       display: flex;
@@ -135,10 +135,11 @@
       display: flex;
       flex-direction: row;
     }
-    /* 2列・3列：折り返して並べ、最後の段（あまった1〜2つ）は まん中に寄せる。
+    /* 2列・3列・4列：折り返して並べ、最後の段（あまった1〜3つ）は まん中に寄せる。
        箱の横はばは、JavaScript が「列の数 × ボタンの場所 ＋ あいだ」に書く（列の数で折り返すため） */
     .games[data-layout="grid"],
-    .games[data-layout="grid3"] {
+    .games[data-layout="grid3"],
+    .games[data-layout="grid4"] {
       display: flex;
       flex-direction: row;
       flex-wrap: wrap;
@@ -335,8 +336,40 @@
       display: block;
     }
 
+    /* ===== 7本目「くるま くみたて こうじょう」のボタン =====
+       作りは1〜6本目のボタンと同じ。ふちと下の影の色だけ、工場のあかりの黄色〜オレンジ色にして見分けやすくする */
+    .game-button.build-button {
+      border-color: #e8a417;
+      box-shadow: 0 10px 0 #b27a0c;
+      animation-delay: -0.45s;       /* 1〜6本目のボタンと、ゆれる向きを少しずらす */
+      background: linear-gradient(#fdf1d8, #f8e3b4);   /* 工場のかべ（クリーム色） */
+    }
+    .game-button.build-button.pressed {
+      box-shadow: 0 2px 0 #b27a0c;
+    }
+    /* 工場の床（うすい水色） */
+    .game-button .build-floor {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 50px;
+      background: linear-gradient(#eaf7fd 0, #eaf7fd 5px, #cfe6f2 5px);
+    }
+    /* 荷台がはずれたダンプカーと、うすい形（荷台の場所）、ういている荷台（ゲームの絵を単純にして写したもの）。
+       座標の枠は 横300 × 縦240（ボタンの中と同じ大きさ）。id は top7- で始める */
+    .build-svg {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 300px;
+      height: 240px;
+      display: block;
+    }
+
     /* ===== 画面の高さが 400px 以下のとき（スマホ横・低い画面）の「つめた形」=====
-       6つ並べると、ふだんの あきでは入らないので、縦の向きだけ詰める（JavaScript の fitButtons と同じ値）。
+       7つ並べると、ふだんの あきでは入らないので、縦の向きだけ詰める（JavaScript の fitButtons と同じ値）。
+       高さが 400px より高くても、ふだんの形で ボタンが小さくなりすぎる（率 0.3 未満）ときは、JavaScript が同じ形にする。
        ゲームの名前は ボタンの左右 8px ずつ はみ出すので、列のあいだ（24px）と左右のあき（32px）は変えない */
     body.compact {
       gap: 8px;
@@ -905,6 +938,67 @@
     </svg>
   </a>
   </div></div>
+
+  <div class="slot"><div class="slot-inner">
+  <!-- 「くるま くみたて こうじょう」へのボタン。
+       ファイルをダブルクリックで開いたときも動くように、index.html まで書く -->
+  <a class="game-button build-button" data-name="くるま くみたて/こうじょう" id="top7-buildGame" href="games/07-build/index.html" aria-label="くるま くみたて こうじょう">
+    <div class="build-floor"></div>
+    <!-- 荷台がはずれた ダンプカー（荷台の場所は うすい形）と、少し浮いている荷台
+         （ゲームの図鑑の絵を単純にして写したもの。この画面では動かさない。文字は入れない）。
+         奥から順に：工場のあかり → ダンプカー → 荷台の うすい形 → 荷台の影 → 浮いている荷台 -->
+    <svg class="build-svg" viewBox="0 0 300 240" aria-hidden="true" focusable="false">
+      <!-- 天井からぶら下がる、丸いかさのあかり2つ（止まった絵） -->
+      <g stroke="#b9a98a" stroke-width="2"><path d="M 62 0 L 62 24"/><path d="M 238 0 L 238 24"/></g>
+      <path d="M 46 40 Q 46 22 62 22 Q 78 22 78 40 Z" fill="#fff0b0" stroke="#e6c978" stroke-width="2"/>
+      <path d="M 222 40 Q 222 22 238 22 Q 254 22 254 40 Z" fill="#fff0b0" stroke="#e6c978" stroke-width="2"/>
+      <!-- ダンプカー（横 290 × 縦 220 の絵を 0.74倍。荷台は ついていない。タイヤの下が、床の中ほどにのる） -->
+      <g transform="translate(40 37) scale(0.74)" stroke="#5a3d1e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+        <ellipse cx="146" cy="214" rx="128" ry="5" fill="#5a3d1e" opacity="0.25" stroke="none"/>
+        <!-- 灰色の台と、前のバンパー -->
+        <rect x="25" y="167" width="252" height="23" rx="7" fill="#8a8f96" stroke="none"/>
+        <path d="M 32 184 L 270 184" fill="none" stroke="#6e737a" stroke-width="5"/>
+        <rect x="25" y="167" width="252" height="23" rx="7" fill="none"/>
+        <rect x="273" y="173" width="13" height="12" rx="4" fill="#c8ccd0"/>
+        <!-- 青い運転席（窓1枚） -->
+        <path d="M 200 195 L 200 107 Q 200 95 212 95 L 254 95 Q 264 95 267 105 L 278 135 Q 280 141 280 149 L 280 187 Q 280 195 272 195 Z" fill="#4a90d9" stroke="none"/>
+        <path d="M 207 113 Q 207 102 216 102 L 252 102" fill="none" stroke="#76b0ea" stroke-width="5"/>
+        <path d="M 207 188 L 272 188" fill="none" stroke="#2f6fb4" stroke-width="7"/>
+        <path d="M 200 195 L 200 107 Q 200 95 212 95 L 254 95 Q 264 95 267 105 L 278 135 Q 280 141 280 149 L 280 187 Q 280 195 272 195 Z" fill="none"/>
+        <path d="M 210 113 Q 210 107 216 107 L 253 107 Q 259 107 261 113 L 269 136 Q 270 141 265 141 L 214 141 Q 210 141 210 137 Z" fill="#bfe4f5" stroke-width="2.5"/>
+        <g fill="none" stroke="#ffffff" stroke-width="4" opacity="0.7">
+          <path d="M 220 135 L 232 113"/>
+          <path d="M 231 135 L 243 113"/>
+        </g>
+        <rect x="212" y="151" width="13" height="4" rx="2" fill="#5a3d1e" stroke="none"/>
+        <path d="M 270 149 L 270 183" fill="none" stroke-width="1.5"/>
+        <!-- 前のライトと、うしろの小さな赤いランプ -->
+        <circle cx="275" cy="161" r="5.5" fill="#fff3c4" stroke-width="2"/>
+        <rect x="20" y="170" width="6" height="10" rx="2" fill="#e86a5a" stroke-width="2"/>
+        <!-- タイヤ3つ -->
+        <g transform="translate(60 193)"><circle r="22" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/><circle r="3.5" fill="#8a8a8a" stroke="none"/></g>
+        <g transform="translate(140 193)"><circle r="22" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/><circle r="3.5" fill="#8a8a8a" stroke="none"/></g>
+        <g transform="translate(235 193)"><circle r="22" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/><circle r="3.5" fill="#8a8a8a" stroke="none"/></g>
+        <!-- 荷台の場所の うすい形（うすい白の塗り ＋ 少し濃い青灰の線） -->
+        <g fill="#ffffff" fill-opacity="0.7" stroke="#b8c6d4" stroke-width="3">
+          <path d="M 28 168 L 36 108 Q 38 100 46 100 L 190 100 Q 198 100 200 108 L 204 168 Z"/>
+          <rect x="22" y="94" width="184" height="10" rx="5"/>
+        </g>
+      </g>
+      <!-- 荷台のうすい影（うすい形の上） -->
+      <ellipse cx="136" cy="118" rx="52" ry="6" fill="#5a3d1e" opacity="0.15"/>
+      <!-- 少し浮いている荷台（少し斜め） -->
+      <g transform="translate(140 72) rotate(-8)">
+        <g transform="scale(0.74) translate(-114 -134)" stroke="#5a3d1e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+          <path d="M 28 168 L 36 108 Q 38 100 46 100 L 190 100 Q 198 100 200 108 L 204 168 Z" fill="#8fa3b8"/>
+          <path d="M 36 112 L 192 112" fill="none" stroke="#b3c3d3" stroke-width="5"/>
+          <path d="M 70 118 L 72 160 M 112 118 L 112 160 M 154 118 L 152 160" fill="none" stroke="#6d8299" stroke-width="3"/>
+          <rect x="22" y="94" width="184" height="10" rx="5" fill="#b3c3d3"/>
+        </g>
+      </g>
+    </svg>
+  </a>
+  </div></div>
   </div>
 
   <script>
@@ -943,17 +1037,18 @@
     });
 
     // ボタンがいくつ並んでも画面に入るように、並べ方と、縮める率（0.3〜1）を、いっしょに決める。
-    //   並べ方の表 LAYOUTS（縦1列 col・横1列 row・2列 grid・3列 grid3）と、ボタンの数 N から、
+    //   並べ方の表 LAYOUTS（縦1列 col・横1列 row・2列 grid・3列 grid3・4列 grid4）と、ボタンの数 N から、
     //   どの並べ方も 次の1つの式で率を出す（ボタンを足しても、式を書きかえなくてよい）：
     //     k ＝ min(1, (横幅 − 32 − 24 × (列 − 1)) ÷ (312 × 列),
     //                 (高さ − 段のあいだ × (段 − 1) − 名前の帯 × 段) ÷ (268 × 段))
     //   段 ＝ ボタンの数 ÷ 列（切り上げ）。いちばん大きい率の並べ方を選ぶ（同じ率なら 表の上から）。
     //   選んだ並べ方は、ボタンを並べる箱の data-layout に書き、見た目の切りかえは CSS が行う。
-    //   2列・3列のときは、箱の横はばを「列の数ぶん」に決めて折り返し、最後の段は まん中に寄せる。
+    //   2列・3列・4列のときは、箱の横はばを「列の数ぶん」に決めて折り返し、最後の段は まん中に寄せる。
     //   ボタンの場所は 312 × 268、列のあいだは 24px、画面のはしからは 16px、題名とボタンのあいだは 24px あける。
     //   名前の帯（LABEL_H ＝ 36px。ボタンの下の ゲームの名前の場所）を、1段ごとにとる。
     //   段のあいだ（rowGap）は、縦に詰めて ボタンを大きくするため 16px。
-    //   画面の高さが 400px 以下（スマホ横・低い画面）のときだけ「つめた形」にする。詰めるのは縦の向きだけ：
+    //   画面の高さが 400px 以下（スマホ横・低い画面）のときと、ふだんの形で いちばん大きい率が 0.3 未満のとき
+    //   （小さいスマホ縦など。印を付けて、題名の高さを測り直してから計算し直す）だけ「つめた形」にする。詰めるのは縦の向きだけ：
     //     画面の上下のあき 32 → 12、題名とボタンのあいだ 24 → 8、題名の文字 → 22px、段のあいだ 16 → 8。
     //     列のあいだ（24）と画面の左右のあき（32）は、ゲームの名前が左右へ はみ出す（8px ずつ）ので変えない。
     //   この値は、CSS（body.compact）と同じにする。
@@ -969,17 +1064,14 @@
     var LAYOUTS = [
       { layout: "grid",  cols: 2 },
       { layout: "grid3", cols: 3 },
+      { layout: "grid4", cols: 4 },
       { layout: "col",   cols: 1 },
       { layout: "row",   cols: BUTTON_COUNT }
     ];
-    function fitButtons() {
-      var w = window.innerWidth;
-      var h = window.innerHeight;
-      // ① まず画面の高さで「つめた形」の印を付ける・外す（題名の文字の大きさが切りかわる）
-      var compact = h <= COMPACT_MAX_H;
-      document.body.classList.toggle("compact", compact);
+    // ② 題名の高さを測る → ③ 段のあいだを書く → ④ 率を計算して、いちばん大きい並べ方を返す
+    function measureLayouts(w, h, compact) {
       var m = compact ? COMPACT : NORMAL;
-      // ② そのあとで題名の高さを測る（印を付ける前に測ると、古い高さになる）
+      // ② 題名の高さを測る（印を付けたあとに測る。付ける前だと、古い高さになる）
       var room = h - m.vPad - title.offsetHeight - m.titleGap;      // 題名の下で、ボタンに使える高さ
       // ③ 段のあいだも、その形の値で書き直す（回転したときも、戻るように）
       games.style.rowGap = m.rowGap + "px";
@@ -988,16 +1080,30 @@
       for (var i = 0; i < LAYOUTS.length; i++) {
         var cols = LAYOUTS[i].cols;
         var rows = Math.ceil(BUTTON_COUNT / cols);
-        var k = Math.min(1,
+        var rate = Math.min(1,
           (w - 32 - 24 * (cols - 1)) / (312 * cols),
           (room - m.rowGap * (rows - 1) - LABEL_H * rows) / (268 * rows));
-        if (!best || k > best.k) best = { layout: LAYOUTS[i].layout, cols: cols, k: k };
+        if (!best || rate > best.k) best = { layout: LAYOUTS[i].layout, cols: cols, k: rate };
+      }
+      return best;
+    }
+    function fitButtons() {
+      var w = window.innerWidth;
+      var h = window.innerHeight;
+      // ① まず画面の高さで「つめた形」の印を付ける・外す（回転の前の古い印は、ここで必ず書きかえる）
+      var compact = h <= COMPACT_MAX_H;
+      document.body.classList.toggle("compact", compact);
+      var best = measureLayouts(w, h, compact);
+      // ふだんの形で、いちばん大きい率が 0.3 未満のとき（小さいスマホ縦など）だけ、「つめた形」にして計算し直す
+      if (!compact && best.k < 0.3) {
+        document.body.classList.add("compact");
+        best = measureLayouts(w, h, true);
       }
       var k = Math.max(0.3, best.k);
       games.setAttribute("data-layout", best.layout);
       games.style.setProperty("--k", k);
-      // 2列・3列：列の数 × ボタンの場所 ＋ あいだ（わずかな誤差で折り返しが変わらないよう 1px ゆとりを足す）
-      if (best.layout === "grid" || best.layout === "grid3") {
+      // 2列・3列・4列：列の数 × ボタンの場所 ＋ あいだ（わずかな誤差で折り返しが変わらないよう 1px ゆとりを足す）
+      if (best.layout === "grid" || best.layout === "grid3" || best.layout === "grid4") {
         games.style.width = (best.cols * 312 * k + (best.cols - 1) * 24 + 1) + "px";
       } else {
         games.style.width = "";
