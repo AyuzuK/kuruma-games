@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <!-- スマホやタブレットでもちょうどいい大きさで表示するための設定 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>おなじ くるまを さがそう</title>
+
+  <!-- 全部のゲームで使う、共通の見た目（拡大を止める・大人用ボタン・指マーク・ぴょん・紙ふぶき） -->
+  <link rel="stylesheet" href="../../shared/kuruma-base.css">
+
+  <style>
+    body {
+      position: relative;            /* 背景・カード・指マークは、この画面いっぱいの箱を基準に置く */
+      background: #cfeaf6;           /* 空の色（背景の絵が出るまでの、念のための色） */
+    }
+
+    /* =====================================================
+       背景（明るい昼の空と、やさしい黄緑の丘。3〜5本目と同じ雰囲気）
+       ===================================================== */
+    .scenery {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      overflow: hidden;
+      --hills: 40%;                  /* 丘の高さ（画面の高さに対する割合） */
+      background: linear-gradient(#8ccbf0 0%, #d8f0ff 62%, #e6f5f0 100%);
+      pointer-events: none;
+    }
+    @media (orientation: portrait) {
+      .scenery { --hills: 36%; }
+    }
+
+    /* 雲：画面2つぶんの横長の帯に、同じ並びを2回くり返して置き、とてもゆっくり左へ流す（CSS のアニメーションだけ）。
+       帯の半分（画面1つぶん）動いたところで最初に戻るので、つなぎ目が見えない */
+    .clouds {
+      position: absolute;
+      left: 0;
+      top: 84px;
+      width: 200%;
+      height: max(60px, calc(100% - 84px - var(--hills) * 0.8));
+      animation: kumo 160s linear infinite;
+    }
+    @keyframes kumo {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+    .cloud {
+      position: absolute;
+      display: block;
+      height: auto;
+      aspect-ratio: 120 / 56;
+    }
+    .cloud-l { width: clamp(100px, 13vw, 200px); }
+    .cloud-m { width: clamp(80px, 10vw, 150px); }
+    .cloud-s { width: clamp(60px, 7vw, 110px); }
+    @media (max-height: 500px) {
+      .cloud-l { width: 76px; }
+      .cloud-m { width: 60px; }
+      .cloud-s { display: none; }
+    }
+    .hills {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: var(--hills);
+      display: block;
+    }
+
+    /* 雲・木の形を1か所に書いておくための、見えない SVG */
+    .svg-defs {
+      position: absolute;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+    }
+
+    /* =====================================================
+       上の文字「おなじ くるまは どこ？」（そろったあいだは、くるまの名前）
+       広い画面：上から 30px、右上の2つのボタンを避けて左右に 160px ずつあける
+       せまい画面（560px より小さい）：ボタンの段より下（上から 92px）
+       入りきらないときは、JavaScript が文字を小さくして1行に収める
+       ===================================================== */
+    .message {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 30px;
+      padding: 0 160px;
+      font-size: clamp(18px, calc((100vw - 320px) / 12), 32px);
+      line-height: 1.3;
+      z-index: 2;
+    }
+    @media (max-width: 559.98px) {
+      .message {
+        top: 92px;
+        padding: 0 12px;
+        font-size: clamp(20px, 6vw, 32px);
+      }
+    }
+
+    /* =====================================================
+       カードの並び（#board）
+       #board を「重なりのまとまり」（z-index: 0）にして、カードをこの中に閉じこめる。
+       この中では、カードは 1、そろった2枚は 2（仕事の動きが、となりのカードより手前に出る）。
+       指マーク（1）は #board より手前、上の文字・道の帯・走る箱（2）はさらに手前、
+       紙ふぶき（3）・大人用ボタン（4）は共通の部品のまま。
+       #board 自身はさわりを受けず、カード（.card）だけが受ける。
+       --cs ＝ カードの率、--r ＝ 角の丸み、--bw ＝ ふちの太さ（JavaScript が書く。後ろの2つは画面の px）
+       ===================================================== */
+    #board {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* カード1枚の箱を、外から順に重ねる（親 → 子）：
+         .card        … さわれる四角（あいだ GAP の半分ずつを足した大きさ）
+         .card-box    … 見た目の箱（GAP ÷ 2 だけ内がわ）
+         .kuruma-hop  … はねる箱（ぴょん・えらんでね）
+         .card-tilt   … 首をかしげる箱（下のまん中が中心）
+         .hint-ring   … 光のわく（めくる箱のうしろ）
+         .card-flip   … めくる箱（横に縮めて、うら面とおもて面を入れかえる）
+         .card-back / .card-front … うら面 / おもて面 */
+    .card {
+      position: absolute;
+      z-index: 1;
+      pointer-events: auto;
+    }
+    .card.front-z {
+      z-index: 2;
+    }
+    .card-box {
+      position: absolute;
+    }
+    .kuruma-hop,
+    .card-tilt,
+    .card-flip,
+    .card-back,
+    .card-front,
+    .card-plate {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+    }
+    .card-tilt {
+      transform-origin: 50% 100%;
+      transition: opacity 0.3s ease;   /* そろったあと、空いた場所になるとき ふわっと消える */
+    }
+    .card[data-state="matched"] .card-tilt {
+      opacity: 0;
+    }
+    .card-flip {
+      transform: scaleX(1);
+      transform-origin: 50% 50%;
+    }
+
+    /* うら面（全部のカードで同じ絵。水色の地に、白いタイヤの形） */
+    .card-back {
+      box-sizing: border-box;
+      border: var(--bw, 6px) solid #7cc4c2;
+      border-radius: var(--r, 16px);
+      background: #9fd8d6;
+      box-shadow: 0 3px 6px rgba(60, 90, 90, 0.3);
+    }
+    .card-back::after {                /* うすい内ふち（白い細い線） */
+      content: "";
+      position: absolute;
+      left: calc(var(--bw, 6px) * 0.6);
+      top: calc(var(--bw, 6px) * 0.6);
+      right: calc(var(--bw, 6px) * 0.6);
+      bottom: calc(var(--bw, 6px) * 0.6);
+      border: 2px solid rgba(255, 255, 255, 0.95);
+      border-radius: calc(var(--r, 16px) * 0.7);
+      pointer-events: none;
+    }
+    .back-art {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* おもて面（うすいクリーム色の台。どのカードも同じ台）。
+       角の丸み・台の色は、この台の要素だけで描く（おもて面や中の箱には overflow: hidden を付けない） */
+    .card-front {
+      visibility: hidden;              /* ふだんは見えない。.show-front が付くと見える */
+    }
+    .card-flip.show-front .card-front {
+      visibility: visible;
+    }
+    .card-flip.show-front .card-back {
+      visibility: hidden;
+    }
+    .card-plate {
+      box-sizing: border-box;
+      border: var(--bw, 6px) solid #e6d3b5;
+      border-radius: var(--r, 16px);
+      background: #fbf3e0;
+      box-shadow: 0 3px 6px rgba(90, 61, 30, 0.28);
+    }
+    .card-plate::after {
+      content: "";
+      position: absolute;
+      left: calc(var(--bw, 6px) * 0.5);
+      top: calc(var(--bw, 6px) * 0.5);
+      right: calc(var(--bw, 6px) * 0.5);
+      bottom: calc(var(--bw, 6px) * 0.5);
+      border: 2px solid rgba(255, 255, 255, 0.95);
+      border-radius: calc(var(--r, 16px) * 0.7);
+      pointer-events: none;
+    }
+    /* カードの座標の箱（横 300 × 縦 240 を、率 --cs で縮める） */
+    .card-coord {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 300px;
+      height: 240px;
+      transform-origin: 0 0;
+      transform: scale(var(--cs, 0.5));
+    }
+    /* くるまの箱（横 264 × 縦 184。カードのまん中） */
+    .car-slot {
+      position: absolute;
+      left: 18px;
+      top: 28px;
+      width: 264px;
+      height: 184px;
+    }
+    /* カードの中では、地面の影は見せない（走りさるときに戻す） */
+    .kuruma-car.in-card [data-part="shadow"] {
+      display: none;
+    }
+
+    /* 空いた場所（そろった2枚が出ていったあと）：うすい わくだけ */
+    .slot-frame {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      box-sizing: border-box;
+      border: 3px dashed #ffffff;
+      border-radius: var(--r, 16px);
+      background: rgba(255, 255, 255, 0.35);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .card[data-state="matched"] .slot-frame {
+      opacity: 0.4;
+    }
+
+    /* そっと教える光のわく：カードの外がわ・ふち。ふだんは見えない。
+       光るときは 0.8秒でゆっくり明るくなって、そのまま（くり返さない＝点滅しない）。消えるときは 0.3秒 */
+    .hint-ring {
+      position: absolute;
+      left: -6px;
+      top: -6px;
+      right: -6px;
+      bottom: -6px;
+      box-sizing: border-box;
+      border: 4px solid rgba(255, 213, 79, 0.98);
+      border-radius: calc(var(--r, 16px) + 6px);
+      background: rgba(255, 213, 79, 0.6);
+      box-shadow: 0 0 10px 2px rgba(255, 213, 79, 0.95);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+    .hint-ring[data-on="true"] {
+      opacity: 1;
+      transition: opacity 0.8s ease-out;
+    }
+
+    /* =====================================================
+       走る道の帯と、走る2台（そろったあと）
+       どちらも画面に固定（position: fixed）。さわりは受けない。
+       走る箱は4層：.run-x（横）→ .run-y（縦）→ .kuruma-hop（はねる）→ .run-scale（大きさ）
+       ===================================================== */
+    .road-band {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 0;
+      z-index: 2;
+      pointer-events: none;
+      box-sizing: border-box;
+      background: #cfc8b4;
+      border-top: 4px solid #e3ddcb;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    .road-band.on {
+      opacity: 0.9;
+    }
+    .run-layer {
+      position: fixed;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+    .run-x,
+    .run-y {
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+    .run-scale {
+      position: absolute;
+      left: 0;
+      top: 0;
+      transform-origin: 0 0;
+    }
+
+    /* 動きを減らす設定：雲を止める。めくる・うら返るは、縮めずに ふわっと入れかえる（0.2秒／うら返りは 0.3秒）。
+       光のわくは、すぐ光った形を出す */
+    @media (prefers-reduced-motion: reduce) {
+      .clouds { animation: none; }
+      .card-front {
+        visibility: visible;
+        opacity: 0;
+        transition: opacity 0.2s linear;
+      }
+      .card-flip.show-front .card-front {
+        opacity: 1;
+      }
+      .card-back,
+      .card-flip.show-front .card-back {
+        visibility: visible;
+      }
+      .card-flip.slow .card-front {
+        transition-duration: 0.3s;
+      }
+      .hint-ring,
+      .hint-ring[data-on="true"] {
+        transition: none;
+      }
+    }
+  </style>
+</head>
+<body data-scene="play" data-cards="4" data-open="0" data-hint="off">
+
+  <!-- 雲・木の形（ここに1回だけ書いて、<use> で何回も使う）。この SVG 自体は見えない -->
+  <svg class="svg-defs" aria-hidden="true" focusable="false">
+    <defs>
+      <!-- 丸い木1本。根もとが (0, 0)、上に向かって y がマイナスになる -->
+      <g id="bgTree">
+        <g fill="#5a3d1e">
+          <circle cx="-18" cy="-70" r="24"/>
+          <circle cx="18" cy="-72" r="24"/>
+          <circle cx="0" cy="-98" r="28"/>
+        </g>
+        <g fill="#74963a">
+          <circle cx="-18" cy="-70" r="22"/>
+          <circle cx="18" cy="-72" r="22"/>
+        </g>
+        <g fill="#8fb34a">
+          <circle cx="-18" cy="-78" r="19"/>
+          <circle cx="18" cy="-80" r="19"/>
+          <circle cx="0" cy="-98" r="26"/>
+        </g>
+        <path d="M -5 0 L -4 -50 L 4 -50 L 5 0 Z" fill="#8a5a3c" stroke="#5a3d1e" stroke-width="2" stroke-linejoin="round"/>
+      </g>
+      <!-- 雲（もこもこ）。下にうすい青の影、その上に白 -->
+      <g id="bgCloud">
+        <path fill="#dcebf7"
+              d="M 14 52 Q 2 52 4 42 Q 6 32 18 34 Q 20 18 38 20 Q 46 8 62 12 Q 76 6 84 20 Q 100 16 104 30 Q 118 32 116 44 Q 114 54 102 54 Z"/>
+        <path fill="#ffffff"
+              d="M 14 47 Q 2 47 4 37 Q 6 27 18 29 Q 20 13 38 15 Q 46 3 62 7 Q 76 1 84 15 Q 100 11 104 25 Q 118 27 116 39 Q 114 48 102 48 Z"/>
+      </g>
+    </defs>
+  </svg>
+
+  <!-- ===== 背景：空・雲・丘 ===== -->
+  <div class="scenery" aria-hidden="true">
+    <div class="clouds">
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 3%; top: 8%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-s" viewBox="0 0 120 56" style="left: 17%; top: 46%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-m" viewBox="0 0 120 56" style="left: 27%; top: 20%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 40%; top: 4%;"><use href="#bgCloud"/></svg>
+
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 53%; top: 8%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-s" viewBox="0 0 120 56" style="left: 67%; top: 46%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-m" viewBox="0 0 120 56" style="left: 77%; top: 20%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 90%; top: 4%;"><use href="#bgCloud"/></svg>
+    </div>
+    <!-- 丘（やさしい黄緑）。横長の絵を、画面いっぱいに広げて、はみ出た左右は切る（slice） -->
+    <svg class="hills" viewBox="0 0 1200 400" preserveAspectRatio="xMidYMax slice">
+      <path fill="#cfe58f" opacity="0.7"
+            d="M 0 150 C 150 100 300 90 440 128 C 560 162 660 140 760 106 C 880 66 1010 72 1200 118 L 1200 400 L 0 400 Z"/>
+      <path fill="#d8e98d"
+            d="M 0 222 C 140 184 280 180 420 202 C 560 226 700 212 820 190 C 960 164 1080 176 1200 198 L 1200 400 L 0 400 Z"/>
+      <use href="#bgTree" transform="translate(110 250) scale(0.62)"/>
+      <use href="#bgTree" transform="translate(1100 246) scale(0.66)"/>
+      <path fill="#c3dc7a"
+            d="M 0 330 C 220 316 420 326 600 322 C 800 318 1000 312 1200 324 L 1200 400 L 0 400 Z"/>
+      <g>
+        <circle cx="80" cy="358" r="4.5" fill="#f5d34a"/>
+        <circle cx="96" cy="366" r="4" fill="#ffffff"/>
+        <circle cx="310" cy="372" r="4" fill="#f2a7b8"/>
+        <circle cx="760" cy="376" r="4" fill="#f2a7b8"/>
+        <circle cx="940" cy="384" r="4.5" fill="#f5d34a"/>
+        <circle cx="956" cy="378" r="4" fill="#ffffff"/>
+      </g>
+    </svg>
+  </div>
+
+  <!-- ===== 走る道の帯（そろった2台が ならぶところ。場所は JavaScript が書く） ===== -->
+  <div class="road-band" id="roadBand" aria-hidden="true"></div>
+
+  <!-- ===== 走る2台（そろったとき、JavaScript がここに入れる） ===== -->
+  <div class="run-layer" id="runLayer" aria-hidden="true"></div>
+
+  <!-- data-showing：いま出している文字の種類（title ＝ 「おなじ くるまは どこ？」、name ＝ くるまの名前） -->
+  <p class="kuruma-message message" id="message" data-showing="title">おなじ くるまは どこ？</p>
+
+  <!-- 大人用のボタン（どちらも2秒長押し）。トップ画面へ戻る・音を消す -->
+  <button class="adult-btn home-btn" id="homeBtn" type="button" aria-label="もどる（2びょう ながおし）">
+    <!-- おうちの形（三角の屋根、四角いかべ、まん中に戸） -->
+    <svg viewBox="0 0 26 26" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="#5a3d1e" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M 6 11.5 L 6 23 L 20 23 L 20 11.5" fill="#fff3c4"/>
+        <path d="M 2.5 13 L 13 3.5 L 23.5 13"/>
+        <path d="M 10.5 23 L 10.5 17 L 15.5 17 L 15.5 23"/>
+      </g>
+    </svg>
+  </button>
+  <button class="adult-btn mute-btn" id="muteBtn" type="button" aria-label="おとを けす（2びょう ながおし）">🔊</button>
+
+  <!-- カードの並び（JavaScript が作って、この中に入れる） -->
+  <div id="board"></div>
+
+  <!-- 全部のゲームで使う、共通の部品（音 → BGM → さわる操作 → くるまの図鑑 → 動き → 選ぶ仕組み の順に読み込む） -->
+  <script src="../../shared/kuruma-sound.js"></script>
+  <script src="../../shared/kuruma-bgm.js"></script>
+  <script src="../../shared/kuruma-touch.js"></script>
+  <script src="../../shared/kuruma-cars.js"></script>
+  <script src="../../shared/kuruma-stage.js"></script>
+  <script src="../../shared/kuruma-choice.js"></script>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var K = window.Kuruma;
+      var C = K.choice;
+
+      // =====================================================
+      // 設定（数字を変えると動きが変わります。時間はミリ秒）
+      // =====================================================
+      // 図鑑の24台（図鑑の順）
+      var CAR_IDS = ["mixer", "dump", "bulldozer", "garbage", "shovel", "fire", "ambulance", "crane", "police",
+                     "grader", "tanker", "tractor", "taxi", "tow", "sports", "roller", "bus", "doubledecker",
+                     "loader", "forklift", "wingtruck", "carrier", "mail", "shirobai"];
+
+      // 同じ面に出さない組み合わせ（色が同じ・形が似ているくるま）。3本目と同じ56組。
+      // 同じ面に似たくるまがいると、めくったときに「同じかな？」と迷い、細かい部品のちがいを見くらべる遊びになるため
+      var NG_PAIRS = [
+        ["dump", "garbage"], ["ambulance", "police"], ["dump", "fire"], ["garbage", "fire"],
+        ["garbage", "ambulance"], ["crane", "shovel"], ["bulldozer", "shovel"], ["bulldozer", "crane"],
+        // 色が同じ組
+        ["grader", "bulldozer"], ["grader", "shovel"], ["grader", "crane"], ["roller", "mixer"],
+        ["bus", "dump"], ["tractor", "garbage"], ["doubledecker", "fire"],
+        // 形が似ている組
+        ["bus", "doubledecker"], ["grader", "tractor"], ["roller", "bulldozer"], ["tanker", "mixer"],
+        ["tanker", "dump"], ["tow", "crane"], ["taxi", "police"], ["taxi", "sports"], ["police", "sports"],
+        ["bus", "ambulance"], ["tanker", "garbage"], ["tanker", "fire"], ["roller", "tractor"],
+        ["tow", "dump"], ["tow", "bus"], ["bus", "garbage"],
+        // 24台にしたときに足した組（色が同じ）
+        ["loader", "mixer"], ["loader", "roller"], ["mail", "fire"], ["mail", "doubledecker"],
+        ["shirobai", "ambulance"], ["shirobai", "police"],
+        // 24台にしたときに足した組（形が似ている）
+        ["loader", "bulldozer"], ["loader", "shovel"], ["loader", "tractor"], ["loader", "grader"],
+        ["forklift", "loader"], ["wingtruck", "garbage"], ["wingtruck", "dump"], ["wingtruck", "tanker"],
+        ["wingtruck", "fire"], ["wingtruck", "bus"], ["wingtruck", "mail"], ["carrier", "tow"],
+        ["carrier", "fire"], ["carrier", "wingtruck"], ["carrier", "tanker"], ["mail", "ambulance"],
+        ["mail", "bus"], ["mail", "taxi"], ["mail", "police"]
+      ];
+
+      // カードの大きさ（カードの座標。画面の大きさに合わせて、率 cs で伸び縮みする）
+      var CARD_W = 300;          // カードの枠の横
+      var CARD_H = 240;          // カードの枠の縦
+      var BOX_W = 264;           // くるまの箱の横（カードのまん中）
+      var BOX_H = 184;           // くるまの箱の縦
+      var CAR_MAX_K = 1.4;       // くるまを大きくする倍率の上限
+      var MEASURE_PAD = 3;       // 測った範囲のまわりに足す余白（ふちどりの線のぶん）
+
+      // 画面の並べ方（画面の px）
+      var SIDE = 12;             // 画面の左右のあき
+      var BOTTOM = 12;           // 画面の下のあき
+      var GAP = 12;              // カードどうしのあいだ
+      var CARD_MAX = 0.8;        // カードの率の上限
+      var ADULT_BOTTOM = 76;     // 音を消しているときの大人用ボタン（64px）の下のはし
+      var HOME_URL = "../../index.html"; // トップ画面
+      var CARD_TIP = { x: 150, y: 60 };  // 指マークの指先（カードの座標）
+
+      // 動きの時間
+      var FLIP_TIME = 300;       // めくる（縮めて・広げる 合わせて）
+      var MISS_SHOW = 500;       // そろわなかったとき、2枚をおもてのまま見せる時間
+      var WRONG_TIME = 600;      // 首をかしげる時間（共通の部品と同じ）
+      var BACK_TIME = 600;       // ゆっくり うら返る（縮めて・広げる 合わせて）
+      var BACK_TIME_REDUCED = 300; // 動きを減らす設定：うら返る（ふわっと入れかえ）
+      var WORK_AT = 900;         // そろってから、仕事を始めるまで
+      var WORK_HOLD = 1200;      // 仕事を始めてから、カードを出るまで
+      var LINE_UP = 600;         // 2台が ならぶ時間
+      var LINE_GAP = 0.2;        // ならんだ2台のあいだ（くるまの横幅の何倍か）
+      var MIN_RUN_TIME = 300;    // 走りさる時間の下限
+      var REDUCED_LEAVE = 500;   // 動きを減らす設定：その場で ふわっと消える時間
+      var OLD_FADE = 300;        // 次の面になるとき、空いた場所が消える時間
+      var ENTER_SLIDE = 600;     // 入ってくる1枚の移動の時間
+      var ENTER_STAGGER = 80;    // 入ってくるカードの出発のずれ（左上から順）
+      var ENTER_TOTAL = 1100;    // 入ってくるのに かかる時間（いちばん遅いカードが止まるまで ＋ 0.1秒）
+      var REDUCED_ENTER = 400;   // 動きを減らす設定：新しいカードが ふわっと出る時間
+      var REDUCED_ENTER_TOTAL = 500;
+      var NUDGE_TIME = 8000;     // 2面目から：さわらないでいると「えらんでね」を1回出すまで
+      var MIN_STEP = 40;         // 1歩の長さの最低（走る時間の計算のもと）
+      var STEP_DIV = 6;          // 1歩の長さ ＝ 画面の横幅 ÷ これ
+      var MSG_FADE = 250;        // 上の文字が消える時間・出る時間（それぞれ）
+      var MIN_MSG_FONT = 12;     // 上の文字を縮めるときの下限
+      var TITLE_TEXT = "おなじ くるまは どこ？";   // ふだんの上の文字
+
+      // 時刻（2枚目をさわった時刻を 0 とする）
+      var WRONG_AT = FLIP_TIME + MISS_SHOW;      // 0.8秒：2枚とも首をかしげる
+      var BACK_AT = WRONG_AT + WRONG_TIME;       // 1.4秒：2枚が うら返り始める
+      var LEAVE_AT = WORK_AT + WORK_HOLD;        // 2.1秒：カードから出る
+
+      // =====================================================
+      // ページの部品
+      // =====================================================
+      var body = document.body;
+      var board = document.getElementById("board");
+      var message = document.getElementById("message");
+      var muteBtn = document.getElementById("muteBtn");
+      var homeBtn = document.getElementById("homeBtn");
+      var roadBand = document.getElementById("roadBand");
+      var runLayer = document.getElementById("runLayer");
+
+      // =====================================================
+      // いまの状態
+      // =====================================================
+      var scene = "play";          // いまの場面（play・miss・match・leave・enter）
+      var cards = [];              // いまの面のカード（左上から順）
+      var L = null;                // いまの並べ方（画面の大きさから計算した値）
+      var faceIndex = -1;          // 何面目か（0 から。画面には出さない）
+      var missStreak = 0;          // 続けて そろわなかった回数（画面には出さない）
+      var everFlipped = false;     // 一度でもカードをめくったか（めくったら、指マークは二度と出さない）
+      var autoNudged = false;      // 「えらんでね」（自動）を この面で もう出したか
+      var matchStart = 0;          // そろった（2枚目をさわった）時刻
+      var matchPair = [];          // そろった2枚
+      var runs = [];               // 走っている2台
+      var nudgeTimer = null;
+      var hint = null;             // 指マーク（1面目のはじめだけ）
+      var measured = {};           // くるまごとの、見えている範囲（1台につき1回だけ測る）
+
+      // 動きを減らす設定か（そのときどきで調べる）
+      function reduced() {
+        return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+      }
+
+      // 決まった時間のあとに関数を呼ぶ
+      function later(ms, fn) {
+        return setTimeout(fn, ms);
+      }
+
+      // =====================================================
+      // 出題器：1面ぶんの くるまとカードの並びを決める
+      //   createDeck(rand).next() が { cars: [図鑑の名前…], order: [カードの並び] } を返す。
+      //   1回目は2台（4枚）、2回目から3台（6枚）。同じくるまが2面続けて出ない。
+      //   主役の1台は「これまでに出た回数がいちばん少ない くるま」（同じ回数なら rand で1つ）。
+      //   こうすると、24台すべてが 24面以内に1回は出る。
+      //   ほかの1〜2台は、共通の部品 pick() で選ぶ（どの2台も NG_PAIRS にならない）。
+      //   乱数は、すべて引数の rand を通す（決まった並びを渡せば、同じ結果になる）
+      // =====================================================
+      function createDeck(rand) {
+        var r = typeof rand === "function" ? rand : Math.random;
+        var counts = {};           // くるまごとの、これまでに出た回数
+        var recent = [];           // 最近8面のくるま
+        var prev = null;           // 前の面のくるま
+        var faces = 0;             // 作った面の数
+        var i;
+        for (i = 0; i < CAR_IDS.length; i++) counts[CAR_IDS[i]] = 0;
+
+        function inPrev(id) {
+          return !!prev && prev.indexOf(id) >= 0;
+        }
+        function seenCounts() {
+          var s = {};
+          for (var a = 0; a < recent.length; a++) {
+            for (var b = 0; b < recent[a].length; b++) s[recent[a][b]] = (s[recent[a][b]] || 0) + 1;
+          }
+          return s;
+        }
+        // 主役 lead と組にして、n 台の組を選ぶ。作れなければ null
+        function trySet(lead, n) {
+          var pool = [];
+          for (var p = 0; p < CAR_IDS.length; p++) {
+            if (!inPrev(CAR_IDS[p])) pool.push(CAR_IDS[p]);      // 前の面に出たくるまは入れない
+          }
+          var seen = seenCounts();
+          var set = C.pick(lead, pool, NG_PAIRS, n, prev, r, seen);
+          if (!set) set = C.pick(lead, CAR_IDS, NG_PAIRS, n, prev, r, seen);   // ふつうは起きない（念のため）
+          return set;
+        }
+
+        return {
+          next: function () {
+            var n = faces === 0 ? 2 : 3;
+            // 主役の候補：前の面に出ていないくるまを、まぜてから、出た回数の少ない順に並べる
+            var cand = [];
+            for (var c = 0; c < CAR_IDS.length; c++) {
+              if (!inPrev(CAR_IDS[c])) cand.push(CAR_IDS[c]);
+            }
+            cand = C.shuffle(cand, r);
+            cand.sort(function (p, q) { return counts[p] - counts[q]; });
+            var set = null;
+            for (var t = 0; t < cand.length && !set; t++) set = trySet(cand[t], n);
+            if (!set) {
+              // ふつうは起きない（念のため）：入れない組の決まりをゆるめて作る
+              set = [cand[0]];
+              for (var f = 0; f < CAR_IDS.length && set.length < n; f++) {
+                if (CAR_IDS[f] !== cand[0]) set.push(CAR_IDS[f]);
+              }
+            }
+            for (var k = 0; k < set.length; k++) counts[set[k]]++;
+            recent.push(set.slice());
+            if (recent.length > 8) recent.shift();
+            prev = set.slice();
+            faces++;
+            var ids = [];
+            for (var m = 0; m < set.length; m++) ids.push(set[m], set[m]);   // 同じくるまを2枚ずつ
+            return { cars: set.slice(), order: C.shuffle(ids, r) };
+          }
+        };
+      }
+      var deck = createDeck(Math.random);
+
+      // =====================================================
+      // くるまの見えている範囲を測る
+      //   見えている末端の図形（path・rect・circle など）ごとの getBBox を、svg の座標に直して囲む。
+      //   <g> や <svg>（入れ物）には getBBox をかけない（切りぬかれて見えない形で、実際より大きく測れるため）。
+      //   [clip-path] の中・<clipPath> の中・display: none の中・不透明度 0 のものは、数えない。
+      //   地面の影（shadow）と ランプの光の輪（glow）も、くるまの本体ではないので数えない。
+      //   svg はページの中に入っていて、見えている（display: none でない）ことが必要。測れなければ null
+      // =====================================================
+      function measureCar(svg) {
+        var screen = svg.getScreenCTM ? svg.getScreenCTM() : null;
+        if (!screen) return null;
+        var inv;
+        try { inv = screen.inverse(); } catch (err0) { return null; }   // 逆の行列が作れないとき（縮んでいるなど）は測らない
+        var minX = Infinity;
+        var minY = Infinity;
+        var maxX = -Infinity;
+        var maxY = -Infinity;
+        var shapes = svg.querySelectorAll("path, rect, circle, ellipse, line, polygon, polyline");
+        for (var j = 0; j < shapes.length; j++) {
+          var s = shapes[j];
+          if (s.closest("[clip-path], clipPath")) continue;
+          if (s.closest('[data-part="shadow"], [data-part="glow"]')) continue;
+          // 図形から svg までの どれかが opacity 0 なら、見えていないので数えない
+          var hidden = false;
+          for (var up = s; up && up !== svg; up = up.parentNode) {
+            if (up.nodeType === 1 && window.getComputedStyle(up).opacity === "0") { hidden = true; break; }
+          }
+          if (hidden) continue;
+          var cs = s.getScreenCTM();
+          if (!cs) continue;                                // 見えていない（display: none の中など）
+          var bb;
+          try { bb = s.getBBox(); } catch (err) { continue; }
+          var m = inv.multiply(cs);
+          var xs = [bb.x, bb.x + bb.width];
+          var ys = [bb.y, bb.y + bb.height];
+          for (var a = 0; a < 2; a++) {
+            for (var b = 0; b < 2; b++) {
+              var px = m.a * xs[a] + m.c * ys[b] + m.e;
+              var py = m.b * xs[a] + m.d * ys[b] + m.f;
+              if (px < minX) minX = px;
+              if (px > maxX) maxX = px;
+              if (py < minY) minY = py;
+              if (py > maxY) maxY = py;
+            }
+          }
+        }
+        if (!isFinite(minX) || maxX <= minX || maxY <= minY) return null;
+        return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+      }
+
+      // カードの中のくるまを、くるまの箱（264 × 184）いっぱいに大きくして、まん中に置く
+      //   測った範囲の まわりに MEASURE_PAD を足して viewBox にし、width・height も その大きさ（倍率ぶん）に書き直す。
+      //   倍率 ＝ 測った範囲が箱に入る いちばん大きい倍率（上限 CAR_MAX_K）
+      function fitCar(c) {
+        var svg = c.car.el;
+        var m = measured[c.id];
+        if (!m) {
+          m = measureCar(svg) || { x: 0, y: 0, w: c.car.width, h: c.car.height };   // 測れないときは図鑑の枠のまま
+          measured[c.id] = m;
+        }
+        var k = Math.min(BOX_W / m.w, BOX_H / m.h, CAR_MAX_K);
+        var vw = m.w + MEASURE_PAD * 2;
+        var vh = m.h + MEASURE_PAD * 2;
+        svg.setAttribute("viewBox", (m.x - MEASURE_PAD) + " " + (m.y - MEASURE_PAD) + " " + vw + " " + vh);
+        svg.setAttribute("width", vw * k);
+        svg.setAttribute("height", vh * k);
+        svg.style.left = ((BOX_W - vw * k) / 2) + "px";
+        svg.style.top = ((BOX_H - vh * k) / 2) + "px";
+      }
+
+      // =====================================================
+      // 上の文字の入れかえ（ふだん：「おなじ くるまは どこ？」／そろったあいだ：くるまの名前）
+      //   opacity だけを なめらかに変える（消える → 入れかえ → 出る の1往復。点滅しない）。
+      //   動きを減らす設定では、すぐ入れかえる。いまの文字の種類を data-showing に書く
+      // =====================================================
+      var msgTimer = null;
+      var msgFadeTimer = null;
+
+      // 文字が1行に入る大きさに、小さくする（入るときは CSS の大きさのまま）
+      function fitMessage() {
+        message.style.fontSize = "";
+        var cs = window.getComputedStyle(message);
+        var avail = message.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 8;
+        var range = document.createRange();
+        range.selectNodeContents(message);
+        var w = range.getBoundingClientRect().width;
+        if (avail > 0 && w > avail) {
+          message.style.fontSize = Math.max(MIN_MSG_FONT, Math.floor(parseFloat(cs.fontSize) * avail / w * 10) / 10) + "px";
+        }
+      }
+      function swapMessage(text, kind) {
+        message.textContent = text;
+        message.setAttribute("data-showing", kind);
+        fitMessage();
+        if (reduced()) {
+          message.style.transition = "none";
+          message.style.opacity = "1";
+        } else {
+          message.style.transition = "opacity " + MSG_FADE + "ms ease";
+          message.style.opacity = "1";
+        }
+      }
+      // くるまの名前に入れかえる（まず消えて、入れかえてから出る）
+      function showNameMessage(name) {
+        clearTimeout(msgTimer);
+        clearTimeout(msgFadeTimer);
+        if (reduced()) {
+          swapMessage(name, "name");
+          return;
+        }
+        message.style.transition = "opacity " + MSG_FADE + "ms ease";
+        message.style.opacity = "0";
+        msgTimer = later(MSG_FADE, function () {
+          swapMessage(name, "name");
+        });
+      }
+      // 走りさる終わりの 0.25秒前から、名前を消し始める（走りさったとき、消え終わっているように）
+      function startFadeOutMessage(runMs) {
+        clearTimeout(msgFadeTimer);
+        if (reduced()) return;
+        msgFadeTimer = later(Math.max(0, runMs - MSG_FADE), function () {
+          message.style.transition = "opacity " + MSG_FADE + "ms ease";
+          message.style.opacity = "0";
+        });
+      }
+      function showTitleMessage() {
+        clearTimeout(msgTimer);
+        clearTimeout(msgFadeTimer);
+        swapMessage(TITLE_TEXT, "title");
+      }
+
+      // ===== 場面を <body> に書く（テストの台本が場面を待てるように） =====
+      function setScene(value) {
+        scene = value;
+        body.setAttribute("data-scene", value);
+      }
+      // いま おもてになっている（そろっていない）カードの数を <body> に書く
+      function openCards() {
+        var list = [];
+        for (var i = 0; i < cards.length; i++) {
+          if (cards[i].state === "up") list.push(cards[i]);
+        }
+        return list;
+      }
+      function refreshOpen() {
+        body.setAttribute("data-open", String(openCards().length));
+      }
+
+      // =====================================================
+      // 画面の大きさから、カードの並べ方を計算する
+      //   上から：上の文字（と大人用ボタン）→ カードの並び（のこりの高さの まん中）
+      //   並べ方の候補のうち、カードがいちばん大きくなるものを選ぶ（同じ大きさなら、上のもの）
+      //     率 cs ＝ min(CARD_MAX, (W − GAP × (列 − 1)) ÷ (CARD_W × 列), (H − GAP × (段 − 1)) ÷ (CARD_H × 段))
+      // =====================================================
+      var LAYOUTS = {
+        4: [[2, 2], [4, 1], [1, 4]],
+        6: [[3, 2], [2, 3], [6, 1], [1, 6]]
+      };
+      function computeLayout(n) {
+        var W = window.innerWidth;
+        var H = window.innerHeight;
+        var top = Math.max(message.getBoundingClientRect().bottom, ADULT_BOTTOM) + 8;
+        var aw = W - SIDE * 2;                 // 使える横
+        var ah = H - top - BOTTOM;             // 使える縦
+        var list = LAYOUTS[n] || [[2, 2]];
+        var best = null;
+        for (var i = 0; i < list.length; i++) {
+          var cols = list[i][0];
+          var rows = list[i][1];
+          var cs = Math.min(CARD_MAX,
+            (aw - GAP * (cols - 1)) / (CARD_W * cols),
+            (ah - GAP * (rows - 1)) / (CARD_H * rows));
+          if (!best || cs > best.cs + 1e-9) best = { cols: cols, rows: rows, cs: cs };
+        }
+        best.cs = Math.max(0.1, best.cs);
+        var blockW = best.cols * CARD_W * best.cs + (best.cols - 1) * GAP;
+        var blockH = best.rows * CARD_H * best.cs + (best.rows - 1) * GAP;
+        best.left0 = SIDE + (aw - blockW) / 2 - GAP / 2;    // さわれる四角は、見た目より GAP ÷ 2 ずつ広い
+        best.top0 = top + (ah - blockH) / 2 - GAP / 2;
+        best.midY = top + ah / 2;                           // カードの並びの縦のまん中（走る道の高さ）
+        best.W = W;
+        best.H = H;
+        return best;
+      }
+
+      // 並べ方を、カードに書く
+      function applyLayout() {
+        var cs = L.cs;
+        var cw = CARD_W * cs;
+        var ch = CARD_H * cs;
+        board.style.setProperty("--cs", cs);
+        board.style.setProperty("--r", Math.max(8, 26 * cs) + "px");    // 角の丸み（画面の px）
+        board.style.setProperty("--bw", Math.max(3, 8 * cs) + "px");    // ふちの太さ（画面の px）
+        for (var i = 0; i < cards.length; i++) {
+          var c = cards[i];
+          var col = i % L.cols;
+          var row = Math.floor(i / L.cols);
+          c.x = L.left0 + col * (cw + GAP);
+          c.y = L.top0 + row * (ch + GAP);
+          c.w = cw + GAP;
+          c.el.style.left = c.x + "px";
+          c.el.style.top = c.y + "px";
+          c.el.style.width = c.w + "px";
+          c.el.style.height = (ch + GAP) + "px";
+          c.box.style.left = (GAP / 2) + "px";
+          c.box.style.top = (GAP / 2) + "px";
+          c.box.style.width = cw + "px";
+          c.box.style.height = ch + "px";
+        }
+      }
+
+      // =====================================================
+      // カードを作る
+      // =====================================================
+      // うら面の絵（全部のカードで同じ。水色の地に、白いタイヤの形と、うすい道のしま。文字・数字・「？」は描かない）
+      var BACK_ART =
+        '<svg class="back-art" viewBox="0 0 300 240" aria-hidden="true" focusable="false">' +
+          '<g fill="none" stroke="#c4e9e7" stroke-width="5" stroke-dasharray="14 12" stroke-linecap="round">' +
+            '<path d="M 38 54 L 262 54"/><path d="M 38 186 L 262 186"/>' +
+          '</g>' +
+          '<circle cx="150" cy="120" r="52" fill="#ffffff"/>' +
+          '<circle cx="150" cy="120" r="40" fill="none" stroke="#9fd8d6" stroke-width="6"/>' +
+          '<circle cx="150" cy="120" r="14" fill="#9fd8d6"/>' +
+          '<circle cx="150" cy="120" r="5" fill="#ffffff"/>' +
+          '<g fill="#9fd8d6">' +
+            '<circle cx="150" cy="93" r="4.5"/><circle cx="173.4" cy="133.5" r="4.5"/><circle cx="126.6" cy="133.5" r="4.5"/>' +
+          '</g>' +
+        '</svg>';
+
+      // カード1枚を作る（くるまの絵は、カード1枚ごとに別に作る）
+      //   id … 図鑑の名前、pair … その面の何番目のくるまか（a・b・c）、nth … 同じペアの1枚目・2枚目（0・1）
+      function makeCard(id, pair, nth) {
+        var el = document.createElement("div");
+        el.className = "card";
+        el.setAttribute("data-car", id);
+        el.setAttribute("data-pair", pair);
+        el.setAttribute("data-nth", String(nth));
+        el.setAttribute("data-state", "down");
+        el.innerHTML =
+          '<div class="card-box">' +
+            '<div class="slot-frame"></div>' +
+            '<div class="kuruma-hop"><div class="card-tilt">' +
+              '<div class="hint-ring" data-on="false"></div>' +
+              '<div class="card-flip">' +
+                '<div class="card-back">' + BACK_ART + '</div>' +
+                '<div class="card-front"><div class="card-plate"></div>' +
+                  '<div class="card-coord"><div class="car-slot"></div></div></div>' +
+              '</div>' +
+            '</div></div>' +
+          '</div>';
+        var car = K.cars.create(id);
+        car.el.classList.add("in-card");                 // カードの中では、地面の影を見せない
+        el.querySelector(".car-slot").appendChild(car.el);
+        var hopEl = el.querySelector(".kuruma-hop");
+        var c = {
+          id: id,
+          pair: pair,
+          nth: nth,
+          el: el,
+          box: el.querySelector(".card-box"),
+          hopEl: hopEl,
+          tilt: el.querySelector(".card-tilt"),
+          ring: el.querySelector(".hint-ring"),
+          flip: el.querySelector(".card-flip"),
+          car: car,
+          hopper: K.stage.hopper(hopEl),
+          state: "down",            // down ＝ うら／up ＝ おもて／matched ＝ そろって空いた
+          face: "back",             // いま見えている面（back・front）
+          timer: null,              // めくる・うら返る途中の予約
+          x: 0, y: 0, w: 0
+        };
+        el._card = c;
+        return c;
+      }
+
+      // 1面ぶんのカードを作って、並べる（古いカードは、呼ぶ前に外しておく）
+      function buildFace(face) {
+        var seen = {};
+        cards = [];
+        for (var i = 0; i < face.order.length; i++) {
+          var id = face.order[i];
+          var nth = seen[id] || 0;
+          seen[id] = nth + 1;
+          var c = makeCard(id, "abc".charAt(face.cars.indexOf(id)), nth);
+          board.appendChild(c.el);
+          cards.push(c);
+        }
+        body.setAttribute("data-cards", String(cards.length));
+        L = computeLayout(cards.length);
+        applyLayout();
+        for (var j = 0; j < cards.length; j++) fitCar(cards[j]);   // ページに入ってから測る
+        faceIndex++;
+        autoNudged = false;
+        refreshOpen();
+      }
+
+      // =====================================================
+      // めくる・うら返る（横に縮めて、見えない一瞬で うら面とおもて面を入れかえ、横に広げる。2D の scaleX の2段）
+      //   3D の回転は使わない（iPhone の Safari で、うら面が透けたり ちらついたりしやすいため）
+      //   動きを減らす設定：縮めずに、うら面とおもて面を ふわっと入れかえる
+      // =====================================================
+      function setFlip(c, scale, ms, ease) {
+        c.flip.style.transition = "transform " + ms + "ms " + ease;
+        // 0 ちょうどだと、iPhone の Safari で面の入れかえがちらつくことがあるので、ほぼ 0 にする
+        c.flip.style.transform = "scaleX(" + (scale === 0 ? 0.001 : scale) + ")";
+      }
+      function showFront(c, on) {
+        c.flip.classList.toggle("show-front", on);
+        c.face = on ? "front" : "back";
+        void c.flip.offsetWidth;               // 面の入れかえを、一度 反映させてから広げる
+      }
+      function flipUp(c) {
+        clearTimeout(c.timer);
+        c.timer = null;
+        c.state = "up";
+        c.el.setAttribute("data-state", "up");
+        refreshOpen();
+        if (reduced()) {
+          c.flip.classList.remove("slow");
+          showFront(c, true);                  // うら返る途中でも、おもて面の不透明度を 1 に戻すだけ
+          return;
+        }
+        var half = FLIP_TIME / 2;
+        if (c.face === "front") {
+          // うら返りの前半（おもて面が見えて縮んでいる途中）：うら面に切りかえず、おもて面のまま広げて戻す
+          setFlip(c, 1, half, "ease-out");
+          return;
+        }
+        // ふつうの めくる動き（うら返りの後半の途中なら、そこから縮める）
+        setFlip(c, 0, half, "ease-in");
+        c.timer = later(half, function () {
+          c.timer = null;
+          showFront(c, true);
+          setFlip(c, 1, half, "ease-out");
+        });
+      }
+      function flipDown(c) {
+        clearTimeout(c.timer);
+        c.timer = null;
+        c.state = "down";
+        c.el.setAttribute("data-state", "down");
+        if (reduced()) {
+          c.flip.classList.add("slow");
+          showFront(c, false);
+          c.timer = later(BACK_TIME_REDUCED, function () {
+            c.timer = null;
+            c.flip.classList.remove("slow");
+          });
+          return;
+        }
+        var half = BACK_TIME / 2;
+        setFlip(c, 0, half, "ease-in");        // 前半：おもて面のまま縮む
+        c.timer = later(half, function () {
+          c.timer = null;
+          showFront(c, false);                 // 後半：うら面になって広がる
+          setFlip(c, 1, half, "ease-out");
+        });
+      }
+
+      // =====================================================
+      // 光のわく（そっと教える。2回続けて そろわなかったあと、次の1枚目のペアのもう1枚が光る）
+      // =====================================================
+      function clearRings() {
+        for (var i = 0; i < cards.length; i++) cards[i].ring.setAttribute("data-on", "false");
+        body.setAttribute("data-hint", "off");
+      }
+
+      // ===== えらんでね =====
+      function downHops() {
+        var list = [];
+        for (var i = 0; i < cards.length; i++) {
+          if (cards[i].state === "down") list.push(cards[i].hopEl);
+        }
+        return list;
+      }
+      function allHops() {
+        var list = [];
+        for (var i = 0; i < cards.length; i++) list.push(cards[i].hopEl);
+        return list;
+      }
+      // 2面目から：8秒さわらないと、1面に1回だけ自動で出す（play のあいだだけ数える）
+      function restartNudgeTimer() {
+        clearTimeout(nudgeTimer);
+        if (faceIndex <= 0 || autoNudged || scene !== "play" || reduced()) return;
+        nudgeTimer = later(NUDGE_TIME, function () {
+          if (scene !== "play" || autoNudged) return;
+          autoNudged = true;
+          C.nudge(downHops());
+        });
+      }
+
+      // =====================================================
+      // 指マーク（1面目のはじめだけ。左上のカードを指す）
+      // =====================================================
+      var hintTimer = K.touch.hintTimer(function () {
+        // めくる前に背景をさわって消えたとき、5秒さわらなかったら また出す
+        if (!everFlipped && scene === "play" && hint) {
+          placeHint();
+          K.touch.showHint(hint);
+        }
+      });
+      // 指先を、左上のカードの（150, 60）に置く。上の文字・2つの大人用ボタンに重なるときは、小さくする・下げる
+      function placeHint() {
+        if (!hint || !cards.length) return;
+        var r = cards[0].box.getBoundingClientRect();
+        var cs = L ? L.cs : 0.5;
+        var tipX = r.left + CARD_TIP.x * cs;
+        var tipY = r.top + CARD_TIP.y * cs;
+        var fit = K.touch.hintFit(tipX, tipY, [message, homeBtn, muteBtn]);
+        hint.style.setProperty("--hs", fit.scale);
+        hint.style.left = (tipX - K.touch.HINT_TIP_X * fit.scale) + "px";
+        hint.style.top = (tipY - K.touch.HINT_HEIGHT * fit.scale + fit.drop) + "px";
+      }
+
+      // =====================================================
+      // 画面のどこかに指がふれた瞬間
+      // （大人用のボタンへのタッチと、2本目からの指は、共通の部品が はぶいてくれる）
+      // =====================================================
+      K.touch.onTap(function (e) {
+        var el = e.target && e.target.closest ? e.target.closest(".card") : null;
+        var c = el ? el._card : null;
+        // 空いた場所と、古いカードは、背景と同じ
+        if (c && (c.state === "matched" || cards.indexOf(c) < 0)) c = null;
+
+        // めくる前に さわったら、指マークを消す（背景なら 5秒で また出る。カードなら めくるので、二度と出ない）
+        if (hint && !everFlipped) {
+          K.touch.hideHint(hint);
+          hintTimer.stop();
+          if (!c) hintTimer.restart();
+        }
+
+        if (scene === "play") {
+          if (!c) {
+            // 背景：うら返しのカードが、左上から順に小さくはねる（音なし。まちがいに数えない）
+            C.nudge(downHops());
+            restartNudgeTimer();
+            return;
+          }
+          if (c.state === "up") {
+            c.hopper.hop();                  // めくってある1枚目：うら返さず、小さくはねるだけ
+            restartNudgeTimer();
+            return;
+          }
+          var opened = openCards();
+          if (opened.length === 0) firstFlip(c);
+          else secondFlip(c, opened[0]);
+          return;
+        }
+
+        if (scene === "miss") {
+          if (c) c.hopper.hop();             // めくれない。さわったカードが小さくはねる（音なし）
+          return;
+        }
+
+        if (scene === "match") {
+          if (Date.now() - matchStart >= FLIP_TIME) {
+            // 0.3秒から：そろった2枚が「プッ」とはねる
+            K.sound.playHorn();
+            for (var i = 0; i < matchPair.length; i++) matchPair[i].hopper.hop();
+          } else if (c && matchPair.indexOf(c) < 0) {
+            c.hopper.hop();                  // 0〜0.3秒は音なし。ほかのカードだけ小さくはねる
+          }
+          return;
+        }
+
+        if (scene === "leave") {
+          // 走っている2台が「プッ」とはねる（走る道すじ・時刻は変えない）
+          K.sound.playHorn();
+          for (var j = 0; j < runs.length; j++) runs[j].hopper.hop();
+          return;
+        }
+
+        if (scene === "enter" && c) c.hopper.hop();   // 入ってくるあいだ：さわったカードが小さくはねる（音なし）
+      });
+
+      // =====================================================
+      // 1枚目をめくる
+      // =====================================================
+      function firstFlip(c) {
+        everFlipped = true;
+        if (hint) {
+          K.touch.hideHint(hint);
+          hintTimer.stop();
+        }
+        C.stopNudge(allHops());              // えらんでね の途中なら止める
+        flipUp(c);
+        // 2回続けて そろわなかったあとは、ペアのもう1枚の光のわくが ふわっと光る
+        if (missStreak >= 2) {
+          for (var i = 0; i < cards.length; i++) {
+            if (cards[i] !== c && cards[i].id === c.id) {
+              cards[i].ring.setAttribute("data-on", "true");
+              body.setAttribute("data-hint", "glow");
+            }
+          }
+        }
+        restartNudgeTimer();
+      }
+
+      // =====================================================
+      // 2枚目をめくる：同じなら match、ちがえば miss
+      // =====================================================
+      function secondFlip(c, first) {
+        C.stopNudge(allHops());
+        clearTimeout(nudgeTimer);
+        clearRings();                        // 光のわくは、この瞬間から ふわっと消える
+        flipUp(c);                           // data-open は 2 になる
+        if (c.id === first.id) startMatch(first, c);
+        else startMiss(first, c);
+      }
+
+      // ----- そろわなかった -----
+      function startMiss(a, b) {
+        setScene("miss");
+        missStreak++;
+        later(WRONG_AT, function () {
+          C.wrong(a.tilt);                   // 2枚とも首をかしげる（「ぽよん」の音は、共通の部品の間隔で1回だけ鳴る）
+          C.wrong(b.tilt);
+        });
+        later(BACK_AT, function () {
+          flipDown(a);                       // 2枚が ゆっくり うら返る。うら返り始めた時刻に play に戻る
+          flipDown(b);
+          refreshOpen();
+          toPlay();
+        });
+      }
+
+      // ----- そろった -----
+      function startMatch(a, b) {
+        setScene("match");
+        matchStart = Date.now();
+        missStreak = 0;
+        matchPair = [a, b].sort(function (p, q) { return p.nth - q.nth; });
+        later(FLIP_TIME, function () {
+          // めくり終わった：「ピポピン♪」・紙ふぶき・2枚がぴょん・上の文字がくるまの名前に
+          C.celebrate();
+          for (var i = 0; i < matchPair.length; i++) {
+            if (!reduced()) matchPair[i].hopper.hop();   // 動きを減らす設定では、はねない
+            matchPair[i].el.classList.add("front-z");   // 仕事の動きが、となりのカードに かくれないように
+          }
+          showNameMessage(K.cars.get(a.id).name);
+        });
+        later(WORK_AT, function () {
+          // 2台いっしょに仕事をする（音は1台ぶんだけ）
+          matchPair[0].car.work();
+          matchPair[1].car.work();
+          matchPair[0].car.sound();
+        });
+        later(LEAVE_AT, leave);
+      }
+
+      // 次にめくれる状態に戻る
+      function toPlay() {
+        setScene("play");
+        relayout();
+        restartNudgeTimer();
+      }
+
+      // =====================================================
+      // 走りさる：そろった2台がカードから出て、道の まん中に ならび、そろって右へ走りさる
+      //   走る箱（4層）：横（translateX）→ 縦（translateY）→ はねる → 大きさ（scale）
+      // =====================================================
+      function makeRun(c) {
+        var svg = c.car.el;
+        var r0 = svg.getBoundingClientRect();          // 移す前の、画面の四角（この四角に置いてから移すので、絵は動いて見えない）
+        var xEl = document.createElement("div");
+        xEl.className = "run-x";
+        var yEl = document.createElement("div");
+        yEl.className = "run-y";
+        var hopEl = document.createElement("div");
+        hopEl.className = "kuruma-hop";
+        var scEl = document.createElement("div");
+        scEl.className = "run-scale";
+        svg.style.left = "0px";
+        svg.style.top = "0px";
+        svg.classList.remove("in-card");               // 走るときは地面の影がある
+        scEl.style.transform = "scale(" + (r0.width / parseFloat(svg.getAttribute("width"))) + ")";
+        scEl.appendChild(svg);
+        hopEl.appendChild(scEl);
+        yEl.appendChild(hopEl);
+        xEl.appendChild(yEl);
+        runLayer.appendChild(xEl);
+        var mover = K.stage.mover(xEl);
+        mover.moveTo(r0.left, 0);
+        yEl.style.transform = "translateY(" + r0.top + "px)";
+        return {
+          xEl: xEl, yEl: yEl, scEl: scEl, mover: mover,
+          hopper: K.stage.hopper(hopEl),
+          w: r0.width, h: r0.height,
+          scale: r0.width / parseFloat(svg.getAttribute("width"))
+        };
+      }
+
+      function leave() {
+        setScene("leave");
+        runs = [];
+        // 0 ＝ 左（うしろ）、1 ＝ 右（先頭）。画面で左にあるカードを うしろにして、2台の道すじが交わらないようにする
+        var pair = matchPair.slice().sort(function (p, q) { return (p.x - q.x) || (p.y - q.y); });
+        var i;
+        for (i = 0; i < pair.length; i++) {
+          runs.push(makeRun(pair[i]));
+          pair[i].state = "matched";          // 2枚は空いた場所になる（ふわっと）
+          pair[i].el.setAttribute("data-state", "matched");
+          pair[i].el.classList.remove("front-z");
+        }
+        refreshOpen();
+
+        var W = window.innerWidth;
+        if (reduced()) {
+          // 動きを減らす設定：ならぶ・走るはしない。その場で ふわっと消える
+          for (i = 0; i < runs.length; i++) {
+            runs[i].xEl.style.transition = "opacity " + REDUCED_LEAVE + "ms ease";
+            runs[i].xEl.style.opacity = "0";
+          }
+          K.sound.playDrive(REDUCED_LEAVE / 1000);
+          later(REDUCED_LEAVE, finishLeave);
+          return;
+        }
+
+        // ----- ならぶ（2.1〜2.7秒）-----
+        var w = runs[0].w;
+        var h = runs[0].h;
+        var gap = LINE_GAP * w;
+        var f = Math.min(1, (W - SIDE * 2) / (2 * w + gap));   // 画面に入らないときは、2台を同じ率で縮める
+        var w2 = w * f;
+        var h2 = h * f;
+        var x0 = (W - (2 * w2 + gap * f)) / 2;                  // 2台合わせて、画面の横まん中
+        // 画面を回したあとでも合うように、いまの画面の高さから、走る道の高さを計算し直す
+        var lineY = computeLayout(cards.length).midY - h2 / 2;
+        var ease = "transform " + LINE_UP + "ms ease-in-out";
+        void runLayer.offsetWidth;
+        for (i = 0; i < runs.length; i++) {
+          var tx = x0 + i * (w2 + gap * f);
+          runs[i].xEl.style.transition = ease;
+          runs[i].xEl.style.transform = "translateX(" + tx + "px)";
+          runs[i].mover.x = tx;
+          runs[i].yEl.style.transition = ease;
+          runs[i].yEl.style.transform = "translateY(" + lineY + "px)";
+          runs[i].scEl.style.transition = ease;
+          runs[i].scEl.style.transform = "scale(" + (runs[i].scale * f) + ")";
+        }
+        // 走る道の帯：2台の下半分に、ふわっと出す
+        roadBand.style.top = (lineY + h2 * 0.7) + "px";
+        roadBand.style.height = (h2 * 0.3 + 10) + "px";
+        roadBand.classList.add("on");
+
+        // ----- 走りさる（2.7秒〜）：2台とも同じ移動量を、同じ時間で右へ -----
+        later(LINE_UP, function () {
+          var dx = Math.max(0, K.stage.exitX() - x0);           // うしろの台の左はしが、画面の外に出きる距離（いまの画面の幅で）
+          var step = Math.max(MIN_STEP, window.innerWidth / STEP_DIV);
+          var time = Math.max(MIN_RUN_TIME, K.stage.timeFor(dx, step));
+          for (var k = 0; k < runs.length; k++) runs[k].mover.moveTo(runs[k].mover.x + dx, time);
+          K.sound.playDrive(time / 1000);                       // 「ブーーン」は2台でも1回
+          startFadeOutMessage(time);
+          later(time, finishLeave);
+        });
+      }
+
+      // 走りさった：走る箱と2台の絵をページから外して、次へ
+      function finishLeave() {
+        for (var i = 0; i < runs.length; i++) {
+          if (runs[i].xEl.parentNode) runs[i].xEl.parentNode.removeChild(runs[i].xEl);
+        }
+        runs = [];
+        roadBand.classList.remove("on");
+        showTitleMessage();                   // 上の文字を「おなじ くるまは どこ？」に戻す
+        var remain = 0;
+        for (var j = 0; j < cards.length; j++) {
+          if (cards[j].state === "down") remain++;
+        }
+        if (remain > 0) toPlay();
+        else startEnter();
+      }
+
+      // =====================================================
+      // 次の面へ：全部そろったら、新しいカード（うら返し）が 左から入ってくる（終わりはない）
+      // =====================================================
+      function startEnter() {
+        setScene("enter");
+        missStreak = 0;
+        clearRings();
+        clearTimeout(nudgeTimer);
+
+        // 古い空いた場所は ふわっと消える
+        var old = cards;
+        for (var o = 0; o < old.length; o++) {
+          old[o].el.style.pointerEvents = "none";
+          old[o].el.style.transition = "opacity " + OLD_FADE + "ms ease";
+          old[o].el.style.opacity = "0";
+        }
+        later(OLD_FADE, function () {
+          for (var q = 0; q < old.length; q++) {
+            if (old[q].el.parentNode) old[q].el.parentNode.removeChild(old[q].el);
+          }
+        });
+
+        buildFace(deck.next());               // 今の画面の大きさで並べる（2面目から6枚）
+        var i;
+        if (reduced()) {
+          // 動きを減らす設定：それぞれの場所に ふわっと出る
+          for (i = 0; i < cards.length; i++) cards[i].el.style.opacity = "0";
+          void board.offsetWidth;
+          for (i = 0; i < cards.length; i++) {
+            cards[i].el.style.transition = "opacity " + REDUCED_ENTER + "ms ease";
+            cards[i].el.style.opacity = "1";
+          }
+          later(REDUCED_ENTER_TOTAL, function () {
+            for (var r = 0; r < cards.length; r++) {
+              cards[r].el.style.transition = "";
+              cards[r].el.style.opacity = "";
+            }
+            toPlay();
+          });
+          return;
+        }
+        // 左の画面の外から、すべるように入ってくる（左上のカードから 0.08秒ずつずらす）
+        for (i = 0; i < cards.length; i++) {
+          cards[i].el.style.transform = "translateX(" + (-(cards[i].x + cards[i].w + 20)) + "px)";
+        }
+        void board.offsetWidth;
+        for (i = 0; i < cards.length; i++) {
+          cards[i].el.style.transition = "transform " + ENTER_SLIDE + "ms ease-out " + (i * ENTER_STAGGER) + "ms";
+          cards[i].el.style.transform = "translateX(0px)";
+        }
+        later(ENTER_TOTAL, function () {
+          for (var r = 0; r < cards.length; r++) {
+            cards[r].el.style.transition = "";
+            cards[r].el.style.transform = "";
+          }
+          toPlay();
+        });
+      }
+
+      // =====================================================
+      // 画面の大きさ・回転が変わったとき
+      // play のときだけ、カードを並べ直す（順番は変えない）。ほかの場面は、終わって play になった直後に合わせる
+      // =====================================================
+      function relayout() {
+        fitMessage();
+        if (scene === "play" && cards.length) {
+          L = computeLayout(cards.length);
+          applyLayout();
+        }
+        placeHint();
+      }
+      K.touch.onViewportChange(relayout);
+      window.addEventListener("load", relayout);
+
+      // =====================================================
+      // 大人用のボタン
+      // =====================================================
+      // 音を消す・出すを切りかえたら、ボタンの大きさ（52px ↔ 64px）が変わるので、指マークの場所を合わせ直す
+      K.touch.setupMuteButton(muteBtn, function () {
+        placeHint();
+        later(250, placeHint);
+      });
+      K.touch.setupHomeButton(homeBtn, HOME_URL);
+
+      // =====================================================
+      // テスト用の口：ページの外から出題器と測り方を調べられる。子どもが触る部分には使わない
+      // =====================================================
+      window.__pairs = {
+        createDeck: createDeck,
+        CAR_IDS: CAR_IDS,
+        NG_PAIRS: NG_PAIRS,
+        measureCar: measureCar,
+        computeLayout: computeLayout
+      };
+
+      // =====================================================
+      // 最初の準備：1面目（4枚）は、もう並んでいる形で始める（入ってくる動きはしない）
+      // =====================================================
+      fitMessage();
+      buildFace(deck.next());
+      setScene("play");
+
+      // 指マーク：左上のカードのまん中より少し上。ページを開いたときは出ている
+      hint = K.touch.createHint();
+      document.body.appendChild(hint);
+      placeHint();
+      K.touch.showHint(hint);
+    })();
+  </script>
+
+</body>
+</html>

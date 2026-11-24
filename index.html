@@ -114,11 +114,11 @@
       overflow: visible;             /* アームの先は絵の枠より少し上に出るので、切らずに見せる */
     }
 
-    /* ===== ボタンを5つ並べる =====
+    /* ===== ボタンを6つ並べる =====
        並べ方は4つ（縦1列 col／横1列 row／2列 grid／3列 grid3）。どれにするかは、下の JavaScript が
        画面の大きさから「いちばん大きく見える並べ方」を選んで、この箱の data-layout に書く
        （ボタンのあいだは どれも 24px）。
-       5つ並べて入らないときは、5つとも同じ率（--k、0.3〜1）で縮める。率も JavaScript が入れる。
+       6つ並べて入らないときは、6つとも同じ率（--k、0.3〜1）で縮める。率も JavaScript が入れる。
        ボタンそのものの大きさ・ゆれ・沈み方は変えずに、外がわの箱（.slot-inner）を縮める */
     .games {
       display: flex;
@@ -312,6 +312,37 @@
       width: 300px;
       height: 240px;
       display: block;
+    }
+
+    /* ===== 6本目「おなじ くるまを さがそう」のボタン =====
+       作りは1〜5本目のボタンと同じ。ふちと下の影の色だけ、むらさき色にして見分けやすくする */
+    .game-button.pairs-button {
+      border-color: #8a63c9;
+      box-shadow: 0 10px 0 #5e3f9a;
+      animation-delay: -1.4s;        /* 1〜5本目のボタンと、ゆれる向きを少しずらす */
+    }
+    .game-button.pairs-button.pressed {
+      box-shadow: 0 2px 0 #5e3f9a;
+    }
+    /* おもてになった ダンプカーのカード2枚と、うら返しのカード2枚（ゲームの絵を単純にして写したもの）。
+       座標の枠は 横300 × 縦240（ボタンの中と同じ大きさ）。id は top6- で始める */
+    .pairs-svg {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 300px;
+      height: 240px;
+      display: block;
+    }
+
+    /* ===== 画面の高さが 400px 以下のとき（スマホ横・低い画面）の「つめた形」=====
+       6つ並べると、ふだんの あきでは入らないので、縦の向きだけ詰める（JavaScript の fitButtons と同じ値）。
+       ゲームの名前は ボタンの左右 8px ずつ はみ出すので、列のあいだ（24px）と左右のあき（32px）は変えない */
+    body.compact {
+      gap: 8px;
+    }
+    body.compact .title {
+      font-size: 22px;
     }
   </style>
 </head>
@@ -807,6 +838,73 @@
     </svg>
   </a>
   </div></div>
+
+  <div class="slot"><div class="slot-inner">
+  <!-- 「おなじ くるまを さがそう」へのボタン。
+       ファイルをダブルクリックで開いたときも動くように、index.html まで書く -->
+  <a class="game-button pairs-button" data-name="おなじ くるまを/さがそう" id="top6-pairsGame" href="games/06-pairs/index.html" aria-label="おなじ くるまを さがそう">
+    <!-- 同じダンプカーが出ている おもてのカード2枚と、うら返しのカード2枚（ゲームの絵を単純にして写したもの。
+         この画面では動かさない。文字は入れない）。奥から順に：丘 → カード4枚（左上・右下がおもて） -->
+    <svg class="pairs-svg" viewBox="0 0 300 240" aria-hidden="true" focusable="false">
+      <defs>
+        <!-- ダンプカー（横 290 × 縦 220 の絵を単純にしたもの。荷台は青、運転席も青） -->
+        <g id="top6-dump" stroke="#5a3d1e" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+          <rect x="25" y="167" width="252" height="23" rx="7" fill="#8a8f96" stroke="none"/>
+          <path d="M 32 184 L 270 184" fill="none" stroke="#6e737a" stroke-width="5"/>
+          <rect x="25" y="167" width="252" height="23" rx="7" fill="none"/>
+          <rect x="273" y="173" width="13" height="12" rx="4" fill="#c8ccd0"/>
+          <!-- 荷台（青。ななめに ふくらんだ形） -->
+          <path d="M 28 168 L 36 108 Q 38 100 46 100 L 190 100 Q 198 100 200 108 L 204 168 Z" fill="#4a90d9"/>
+          <path d="M 36 112 L 192 112" fill="none" stroke="#76b0ea" stroke-width="5"/>
+          <path d="M 70 118 L 72 160 M 112 118 L 112 160 M 154 118 L 152 160" fill="none" stroke="#2f6fb4" stroke-width="3"/>
+          <rect x="22" y="94" width="184" height="10" rx="5" fill="#76b0ea"/>
+          <!-- 運転席（青。窓1枚） -->
+          <path d="M 210 195 L 210 107 Q 210 95 222 95 L 264 95 Q 274 95 277 105 L 288 135 Q 290 141 290 149 L 290 187 Q 290 195 282 195 Z" fill="#4a90d9"/>
+          <path d="M 220 113 Q 220 107 226 107 L 263 107 Q 269 107 271 113 L 279 136 Q 280 141 275 141 L 224 141 Q 220 141 220 137 Z" fill="#bfe4f5" stroke-width="2.5"/>
+          <circle cx="285" cy="161" r="5.5" fill="#fff3c4" stroke-width="2"/>
+          <!-- タイヤ3つ -->
+          <g transform="translate(70 193)"><circle r="22" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/></g>
+          <g transform="translate(150 193)"><circle r="22" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/></g>
+          <g transform="translate(245 193)"><circle r="22" fill="#4a4a4a"/><circle r="12" fill="#c8ccd0" stroke-width="2.5"/></g>
+        </g>
+      </defs>
+
+      <!-- やさしい黄緑の丘 -->
+      <ellipse cx="150" cy="262" rx="230" ry="80" fill="#d8e98d"/>
+      <ellipse cx="60" cy="250" rx="140" ry="50" fill="#cfe58f"/>
+
+      <!-- 左上：おもてのカード（ダンプカー） -->
+      <rect x="14" y="14" width="132" height="104" rx="14" fill="#fbf3e0" stroke="#e6d3b5" stroke-width="5"/>
+      <rect x="21" y="21" width="118" height="90" rx="10" fill="none" stroke="#ffffff" stroke-width="2"/>
+      <use href="#top6-dump" transform="translate(17.6 4.2) scale(0.4)"/>
+
+      <!-- 右上：うら返しのカード -->
+      <rect x="154" y="14" width="132" height="104" rx="14" fill="#9fd8d6" stroke="#7cc4c2" stroke-width="5"/>
+      <rect x="161" y="21" width="118" height="90" rx="10" fill="none" stroke="#ffffff" stroke-width="2"/>
+      <g transform="translate(220 66)">
+        <circle r="26" fill="#ffffff"/>
+        <circle r="19" fill="none" stroke="#9fd8d6" stroke-width="3"/>
+        <circle r="7" fill="#9fd8d6"/>
+        <g fill="#9fd8d6"><circle cx="0" cy="-12" r="2.2"/><circle cx="10.4" cy="6" r="2.2"/><circle cx="-10.4" cy="6" r="2.2"/></g>
+      </g>
+
+      <!-- 左下：うら返しのカード -->
+      <rect x="14" y="126" width="132" height="104" rx="14" fill="#9fd8d6" stroke="#7cc4c2" stroke-width="5"/>
+      <rect x="21" y="133" width="118" height="90" rx="10" fill="none" stroke="#ffffff" stroke-width="2"/>
+      <g transform="translate(80 178)">
+        <circle r="26" fill="#ffffff"/>
+        <circle r="19" fill="none" stroke="#9fd8d6" stroke-width="3"/>
+        <circle r="7" fill="#9fd8d6"/>
+        <g fill="#9fd8d6"><circle cx="0" cy="-12" r="2.2"/><circle cx="10.4" cy="6" r="2.2"/><circle cx="-10.4" cy="6" r="2.2"/></g>
+      </g>
+
+      <!-- 右下：おもてのカード（同じダンプカー） -->
+      <rect x="154" y="126" width="132" height="104" rx="14" fill="#fbf3e0" stroke="#e6d3b5" stroke-width="5"/>
+      <rect x="161" y="133" width="118" height="90" rx="10" fill="none" stroke="#ffffff" stroke-width="2"/>
+      <use href="#top6-dump" transform="translate(157.6 116.2) scale(0.4)"/>
+    </svg>
+  </a>
+  </div></div>
   </div>
 
   <script>
@@ -854,13 +952,19 @@
     //   2列・3列のときは、箱の横はばを「列の数ぶん」に決めて折り返し、最後の段は まん中に寄せる。
     //   ボタンの場所は 312 × 268、列のあいだは 24px、画面のはしからは 16px、題名とボタンのあいだは 24px あける。
     //   名前の帯（LABEL_H ＝ 36px。ボタンの下の ゲームの名前の場所）を、1段ごとにとる。
-    //   段のあいだ（ROW_GAP）は、縦に詰めて ボタンを大きくするため 16px。
+    //   段のあいだ（rowGap）は、縦に詰めて ボタンを大きくするため 16px。
+    //   画面の高さが 400px 以下（スマホ横・低い画面）のときだけ「つめた形」にする。詰めるのは縦の向きだけ：
+    //     画面の上下のあき 32 → 12、題名とボタンのあいだ 24 → 8、題名の文字 → 22px、段のあいだ 16 → 8。
+    //     列のあいだ（24）と画面の左右のあき（32）は、ゲームの名前が左右へ はみ出す（8px ずつ）ので変えない。
+    //   この値は、CSS（body.compact）と同じにする。
     // 画面の大きさが変わったときだけ計算する（すぐ1回と、0.3秒あとにもう1回）
     var games = document.getElementById("games");
     var title = document.querySelector(".title");
     var fitTimer = null;
     var LABEL_H = 36;
-    var ROW_GAP = 16;
+    var COMPACT_MAX_H = 400;                              // この高さ以下のとき「つめた形」
+    var NORMAL = { vPad: 32, titleGap: 24, rowGap: 16 };  // ふだんの形
+    var COMPACT = { vPad: 12, titleGap: 8, rowGap: 8 };   // つめた形
     var BUTTON_COUNT = document.querySelectorAll(".slot").length;
     var LAYOUTS = [
       { layout: "grid",  cols: 2 },
@@ -868,18 +972,25 @@
       { layout: "col",   cols: 1 },
       { layout: "row",   cols: BUTTON_COUNT }
     ];
-    games.style.rowGap = ROW_GAP + "px";
     function fitButtons() {
       var w = window.innerWidth;
       var h = window.innerHeight;
-      var room = h - 32 - title.offsetHeight - 24;      // 題名の下で、ボタンに使える高さ
+      // ① まず画面の高さで「つめた形」の印を付ける・外す（題名の文字の大きさが切りかわる）
+      var compact = h <= COMPACT_MAX_H;
+      document.body.classList.toggle("compact", compact);
+      var m = compact ? COMPACT : NORMAL;
+      // ② そのあとで題名の高さを測る（印を付ける前に測ると、古い高さになる）
+      var room = h - m.vPad - title.offsetHeight - m.titleGap;      // 題名の下で、ボタンに使える高さ
+      // ③ 段のあいだも、その形の値で書き直す（回転したときも、戻るように）
+      games.style.rowGap = m.rowGap + "px";
+      // ④ 率を計算する
       var best = null;
       for (var i = 0; i < LAYOUTS.length; i++) {
         var cols = LAYOUTS[i].cols;
         var rows = Math.ceil(BUTTON_COUNT / cols);
         var k = Math.min(1,
           (w - 32 - 24 * (cols - 1)) / (312 * cols),
-          (room - ROW_GAP * (rows - 1) - LABEL_H * rows) / (268 * rows));
+          (room - m.rowGap * (rows - 1) - LABEL_H * rows) / (268 * rows));
         if (!best || k > best.k) best = { layout: LAYOUTS[i].layout, cols: cols, k: k };
       }
       var k = Math.max(0.3, best.k);
