@@ -245,6 +245,22 @@
     .kuruma-car .part-slot [fill] {
       transition: fill 0.3s ease;
     }
+    /* 小さい部品の場所（ランプ・あんどん・小さいタイヤ）だけ、濃く はっきり見せる */
+    .kuruma-car .part-slot.part-slot-small {
+      opacity: 0.95;
+    }
+    .kuruma-car .part-slot.part-slot-small,
+    .kuruma-car .part-slot.part-slot-small [fill]:not([fill="none"]) {
+      fill: #d3e1ee;
+    }
+    .kuruma-car .part-slot.part-slot-small[stroke]:not([stroke="none"]),
+    .kuruma-car .part-slot.part-slot-small [stroke]:not([stroke="none"]) {
+      stroke: #55708d;
+    }
+    /* 運ぶ絵では、ランプ・窓の明かり（.lit）を見せない（動きを減らす設定で、台と同じ色に重ならないように） */
+    .kuruma-car.part-only .lit {
+      opacity: 0;
+    }
     /* 近づいた・そっと教える：うすい黄色の塗りに ふわっと変わって、そのまま（点滅しない） */
     .kuruma-car .part-slot.slot-hint {
       opacity: 0.85;
@@ -316,13 +332,13 @@
       position: absolute;
       box-sizing: border-box;
       border-radius: 18px;
-      background: #fff4d6;
+      background: #f6e4bc;           /* 明るい黄色の部品（あんどん・窓）でも、輪郭が見える色 */
       box-shadow: inset 0 0 0 3px #d6b077, 0 5px 0 #c49a5c;
       transition: box-shadow 0.3s ease, background-color 0.3s ease;
     }
     /* からっぽの台：うすい凹み */
     .piece-plate[data-empty="true"] {
-      background: #efe0bd;
+      background: #e8d5a8;
       box-shadow: inset 0 3px 6px rgba(120, 80, 30, 0.25), inset 0 0 0 3px #dcc08a, 0 2px 0 #d9bf8b;
     }
     /* そっと教える光：ふち・外がわが、0.8秒でやわらかく明るくなって、そのまま（くり返さない＝点滅しない） */
@@ -333,6 +349,14 @@
     .piece {
       position: absolute;
       pointer-events: none;          /* 受け口は、DOM から動かない台（.piece-plate）だけにする */
+    }
+    .piece-zoom {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      transform-origin: 50% 50%;
     }
     .piece-hop {
       position: absolute;
@@ -476,7 +500,10 @@
       // =====================================================
       // 設定（数字を変えると動きが変わります。時間はミリ秒、大きさは画面の px）
       // =====================================================
-      var CAR_IDS = ["dump", "mixer", "garbage", "tanker", "fire", "bulldozer"];
+      // 図鑑の全部の くるま（24台）。ピースの表は、下の CARS
+      var CAR_IDS = ["dump", "mixer", "garbage", "tanker", "fire", "bulldozer",
+                     "crane", "police", "shovel", "taxi", "sports", "roller", "tow", "grader", "loader", "forklift",
+                     "wingtruck", "carrier", "tractor", "bus", "mail", "ambulance", "shirobai", "doubledecker"];
 
       // くるまの枠（図鑑の絵が入る大きさ）と、測った範囲のまわりに足す余白
       var FRAME_W = 310;
@@ -532,22 +559,50 @@
       var MIN_MSG_FONT = 12;     // 上の文字を縮めるときの下限
       var TITLE_TEXT = "くるまを つくろう";   // ふだんの上の文字
 
-      // 6台の表：特ちょうの部品（main）・うんてんせき（cab）・3つ目（third。"tire" か、キャタピラ）
-      //   parts … 運ぶ絵に出す data-part（1つ目が、くるまの上の「はめる場所」になる。2つ目からは、はめる場所では かくす）
+      // 小さい部品を、トレーと持っているあいだだけ大きく見せる（余白こみの長い辺が 約 44 に見える倍率。上限 2 倍）
+      var ZOOM_TARGET = 44;      // 拡大したとき、余白こみの長い辺が これくらいに見える
+      var ZOOM_MAX = 2;          // 拡大の上限（台ごとに、表で もっと小さく決めてもよい）
+
+      // 24台の表（図鑑の全部）。くるまごとに、ピースを「ふやす順」に並べる（上から、そのくるまのピース数まで使う）。
+      //   kind … ピースの種類。同じ種類の はめる場所にだけ はまる（タイヤは半径ごとに別の種類）
+      //   parts … 運ぶ絵に出す data-part（1つ目が、くるまの上の「はめる場所」になる。2つ目からは、はめる場所では かくす）。
+      //           同じ名前が2つ以上あるときは「名前#番号」（図鑑の絵の中での並び順の番号。0 から）
       //   withParts … 運ぶ絵には入れず、はめる場所では いっしょに かくして、はまったら出す data-part
-      //   tires … くるまにあるタイヤの数（左から 0, 1, 2）
+      //   zoom … true の小さい部品は、トレーと持っているあいだだけ大きく見せる（余白こみの長い辺が ZOOM_TARGET に近づく倍率、
+      //          上限 ZOOM_MAX。数を書くと、その数が上限。はまるときは、はめる場所と同じ本当の大きさに戻る）
       // 足すときは、ここに1行足すだけ
-      var CABS_LIGHT = { kind: "cab", parts: ["cab"], withParts: ["light"] };
+      function pc(kind, parts, withParts, zoom) {
+        return { kind: kind, parts: parts, withParts: withParts || [], zoom: zoom || false };   // zoom：true ＝ ZOOM_MAX まで、数 ＝ その数まで
+      }
+      function tr(i, r, zoom) {          // タイヤ（左から i 番目。半径 r）
+        return pc("tire-" + r, ["tire#" + i], [], zoom);
+      }
+      function cabL() { return pc("cab", ["cab"], ["light"]); }   // うんてんせき（前のライトもいっしょに かくす）
       var CARS = {
-        dump:      { main: { kind: "bed",    parts: ["bed"],              withParts: [] }, cab: CABS_LIGHT, third: "tire", tires: 3 },
-        mixer:     { main: { kind: "drum",   parts: ["drum"],             withParts: [] }, cab: CABS_LIGHT, third: "tire", tires: 3 },
-        garbage:   { main: { kind: "lid",    parts: ["lid"],              withParts: [] }, cab: CABS_LIGHT, third: "tire", tires: 3 },
-        tanker:    { main: { kind: "tank",   parts: ["tank", "porthole"], withParts: [] }, cab: CABS_LIGHT, third: "tire", tires: 3 },
-        fire:      { main: { kind: "ladder", parts: ["ladder"],           withParts: [] },
-                     cab: { kind: "cab", parts: ["cab"], withParts: ["light", "lamp", "glow"] }, third: "tire", tires: 3 },
-        bulldozer: { main: { kind: "blade",  parts: ["blade"],            withParts: [] },
-                     cab: { kind: "cab", parts: ["cab"], withParts: [] },
-                     third: { kind: "track", parts: ["track"], withParts: [] }, tires: 0 }
+        dump:      [pc("bed", ["bed"]), cabL(), tr(2, 22), tr(0, 22)],
+        mixer:     [pc("drum", ["drum"]), cabL(), tr(2, 22), tr(0, 22)],
+        garbage:   [pc("lid", ["lid"]), cabL(), tr(2, 22), tr(0, 22)],
+        tanker:    [pc("tank", ["tank", "porthole"]), cabL(), tr(2, 22), tr(0, 22)],
+        fire:      [pc("ladder", ["ladder"]), pc("cab", ["cab"], ["light", "lamp", "glow"]), tr(2, 23), tr(0, 23)],
+        bulldozer: [pc("blade", ["blade"]), pc("cab", ["cab"]), pc("track", ["track"])],
+        crane:     [pc("boom", ["boom", "hook"]), cabL(), tr(2, 22), tr(0, 22)],
+        police:    [pc("lamp", ["lamp"], ["glow"], true), tr(1, 23), tr(0, 23)],
+        shovel:    [pc("arm", ["arm"]), pc("cab", ["cab"]), pc("track", ["track#1"])],
+        taxi:      [pc("andon", ["andon"], ["glow"], true), pc("door", ["door"]), tr(1, 23), tr(0, 23)],
+        sports:    [pc("wing", ["wing"]), tr(1, 24), tr(0, 24)],
+        roller:    [pc("cab", ["cab"]), pc("roller-40", ["roller#1"]), pc("roller-34", ["roller#0"])],
+        tow:       [pc("boom", ["boom", "hook"]), cabL(), tr(2, 22), tr(0, 22)],
+        grader:    [pc("blade", ["blade"]), pc("cab", ["cab"]), tr(2, 22), tr(0, 22)],
+        loader:    [pc("bucket", ["bucket"]), pc("cab", ["cab"]), tr(1, 30), tr(0, 30)],
+        forklift:  [pc("fork", ["fork"]), pc("cab", ["cab"]), tr(1, 24), tr(0, 19)],
+        wingtruck: [pc("panel", ["panel"]), cabL(), tr(2, 22), tr(0, 22)],
+        carrier:   [pc("deck", ["deck"]), cabL(), tr(2, 15, 1.3), tr(0, 15, 1.3)],
+        tractor:   [pc("cab", ["cab"]), tr(0, 54), tr(1, 26), pc("rotary", ["rotary"])],
+        bus:       [pc("door", ["door"]), tr(1, 23), tr(0, 23)],
+        mail:      [pc("door", ["door"]), tr(1, 23), tr(0, 23)],
+        ambulance: [pc("lamp-back", ["lamp#0"], ["glow#0"], true), pc("lamp-front", ["lamp#1"], ["glow#1"], true), tr(1, 23), tr(0, 23)],
+        shirobai:  [pc("window", ["window"]), pc("lamp", ["lamp"], ["glow"], true), tr(1, 26), tr(0, 26)],
+        doubledecker: [pc("window", ["window"]), tr(1, 23), tr(0, 23)]
       };
 
       // =====================================================
@@ -641,26 +696,24 @@
       // =====================================================
       // 出題器：1台ぶんの くるまとピースの並びを決める
       //   createFactory(rand).next() が { car: 図鑑の名前, pieces: [{ kind, parts, withParts, index }] } を返す。
-      //   1台目はダンプカー（荷台 → うんてんせき の順）。2台目からは6台を袋から出す。
+      //   1台目はダンプカー（荷台 → うんてんせき の順）。2台目からは24台を袋から出す。
       //   同じくるまは続けて出さない（袋の外から出した1台目の次だけ、nextCar で よける）。
-      //   ピースの数は 1台目 2つ、2・3台目 3つ、4台目から 4つ（ブルドーザーは3つまで）。
+      //   ピースの数は 1台目 2つ、2・3台目 3つ、4台目から 4つ（表で最大が3つの台は、3つまで）。
       //   2台目からは、ピースの並びを まぜる（トレーの形に当てはめるのは、並べ方の側）。
       //   乱数は、すべて引数の rand を通す（決まった並びを渡せば、同じ結果になる）
       // =====================================================
       function pieceList(id, count) {
+        // 表の上から、そのくるまの最大（表の長さ）をこえない数まで使う。index ＝ 表の中の番号（範囲を測った結果の入れ物の番号）
         var def = CARS[id];
-        var list = [
-          { kind: def.main.kind, parts: def.main.parts.slice(), withParts: def.main.withParts.slice(), index: 0 },
-          { kind: def.cab.kind, parts: def.cab.parts.slice(), withParts: def.cab.withParts.slice(), index: 0 }
-        ];
-        if (def.third === "tire") {
-          // 前のタイヤ（いちばん右＝いちばん最後の番号）→ うしろのタイヤ（いちばん左＝番号 0）
-          list.push({ kind: "tire", parts: ["tire"], withParts: [], index: def.tires - 1 });
-          list.push({ kind: "tire", parts: ["tire"], withParts: [], index: 0 });
-        } else {
-          list.push({ kind: def.third.kind, parts: def.third.parts.slice(), withParts: def.third.withParts.slice(), index: 0 });
+        var n = Math.min(count, def.length);
+        var list = [];
+        for (var i = 0; i < n; i++) {
+          list.push({
+            kind: def[i].kind, parts: def[i].parts.slice(), withParts: def[i].withParts.slice(),
+            zoom: def[i].zoom, index: i
+          });
         }
-        return list.slice(0, Math.min(count, list.length));
+        return list;
       }
       function createFactory(rand) {
         var r = typeof rand === "function" ? rand : Math.random;
@@ -691,9 +744,6 @@
             return { car: id, pieces: pieces };
           }
         };
-      }
-      function specKey(spec) {
-        return spec.kind === "tire" ? "tire" + spec.index : spec.kind;
       }
 
       // =====================================================
@@ -748,10 +798,16 @@
 
       // svg の中から、data-part の名前の部品を集める
       function partEls(svg, names) {
+        // 「名前#番号」は、同じ名前の部品のうち、図鑑の絵の中で 番号 番目のもの（0 から）だけ
         var out = [];
         for (var i = 0; i < names.length; i++) {
-          var all = svg.querySelectorAll('[data-part="' + names[i] + '"]');
-          for (var j = 0; j < all.length; j++) out.push(all[j]);
+          var pair = names[i].split("#");
+          var all = svg.querySelectorAll('[data-part="' + pair[0] + '"]');
+          if (pair.length > 1) {
+            if (all[parseInt(pair[1], 10)]) out.push(all[parseInt(pair[1], 10)]);
+          } else {
+            for (var j = 0; j < all.length; j++) out.push(all[j]);
+          }
         }
         return out;
       }
@@ -763,16 +819,9 @@
         var def = CARS[id];
         var car = K.cars.create(id);
         measureHost.appendChild(car.el);
-        var out = {};
-        var specs = [def.main, def.cab];
-        if (def.third !== "tire") specs.push(def.third);
-        var i;
-        for (i = 0; i < specs.length; i++) {
-          out[specs[i].kind] = measureParts(car.el, partEls(car.el, specs[i].parts)) || { x: 0, y: 0, w: 60, h: 60 };
-        }
-        var tires = car.el.querySelectorAll('[data-part="tire"]');
-        for (i = 0; i < tires.length; i++) {
-          out["tire" + i] = measureParts(car.el, [tires[i]]) || { x: 0, y: 0, w: 44, h: 44 };
+        var out = [];                                  // 表の番号 → 範囲（くるまの座標）
+        for (var i = 0; i < def.length; i++) {
+          out.push(measureParts(car.el, partEls(car.el, def[i].parts)) || { x: 0, y: 0, w: 60, h: 60 });
         }
         rm(car.el);
         RECTS[id] = out;
@@ -830,6 +879,12 @@
           outer.style.width = it.home.width + "px";
           outer.style.height = it.home.height + "px";
           outer.style.transform = "translate(" + it.home.left + "px," + it.home.top + "px)";
+          // 大きく見せている部品は、影も その大きさに合わせる
+          var z = it.data.zoom || 1;
+          shadow.style.width = (it.home.width * z * 0.88) + "px";
+          shadow.style.left = ((it.home.width - it.home.width * z * 0.88) / 2) + "px";
+          shadow.style.right = "auto";
+          shadow.style.top = (it.home.height * (1 + (z - 1) / 2) + 10) + "px";
           inner.appendChild(shadow);
           it.itemEl.style.left = "0px";
           it.itemEl.style.top = "0px";
@@ -857,7 +912,7 @@
         function visibleCenter(h, fx, fy) {
           var W = window.innerWidth;
           var H = window.innerHeight;
-          var halfH = h.it.home.height * o.lift.scale / 2;
+          var halfH = h.it.home.height * (h.it.data.zoom || 1) * o.lift.scale / 2;
           var vx = fx + h.dx;
           var vy = fy + h.dy - o.lift.up;
           vx = Math.max(o.edge, Math.min(vx, W - o.edge));
@@ -1068,6 +1123,11 @@
           void b.outer.offsetWidth;
           b.outer.style.transform = "translate(" + x + "px," + y + "px)";
           b.inner.style.transform = "translateY(0px) scale(1)";
+          var zEl = it.data.zoomEl;          // 大きく見せていた小さい部品は、はめる場所と同じ本当の大きさに戻る
+          if (zEl && it.data.zoom !== 1) {
+            zEl.style.transition = ease;
+            zEl.style.transform = "scale(1)";
+          }
           it.timer = setTimeout(function () { finishSnap(it); }, o.snapTime);
         }
         function finishSnap(it) {
@@ -1246,7 +1306,7 @@
       //   6通りを、くるまの率 ks の大きい方から順に調べて、はじめに入るものを選ぶ（同じ率なら 表の上から）。
       //   浮いただけで はまらないように、台の上で浮いた形のまん中から 同じ種類の場所のまん中まで、
       //   R ＋ TAP_MOVE ＋ 12px 以上あける（足りなければ、くるまとトレーのあいだを広げる）
-      //   P ＝ { carWidth, pieces: [{ kind, vw, vh }], slots: [{ kind, cx, cy, long }] }（大きさはくるまの座標）
+      //   P ＝ { carWidth, pieces: [{ kind, vw, vh, zoom }], slots: [{ kind, cx, cy, long }] }（大きさはくるまの座標）
       // =====================================================
       var COMBOS = [["below", "T1"], ["below", "T2"], ["below", "T3"], ["right", "T1"], ["right", "T2"], ["right", "T3"]];
 
@@ -1264,7 +1324,7 @@
         if (shape === "T2") {
           var a = 0;                       // いちばん横はばが大きいピース（A）
           for (i = 1; i < n; i++) {
-            if (pieces[i].vw > pieces[a].vw) a = i;
+            if (pieces[i].vw * pieces[i].zoom > pieces[a].vw * pieces[a].zoom) a = i;
           }
           var rest = [];
           for (i = 0; i < n; i++) {
@@ -1275,7 +1335,7 @@
         if (shape === "T3") {
           var tires = [];
           for (i = 0; i < n; i++) {
-            if (pieces[i].kind === "tire") tires.push(i);
+            if (pieces[i].kind.indexOf("tire") === 0) tires.push(i);
           }
           if (tires.length >= 2) {
             // 2つ目のタイヤは、1つ目のタイヤの場所の下に積む
@@ -1296,8 +1356,8 @@
         var i, r, c, m;
         for (i = 0; i < n; i++) {
           pl.push({
-            w: Math.max(GRAB_MIN, P.pieces[i].vw * ks + GRAB_PAD * 2),
-            h: Math.max(GRAB_MIN, P.pieces[i].vh * ks + GRAB_PAD * 2)
+            w: Math.max(GRAB_MIN, P.pieces[i].vw * ks * P.pieces[i].zoom + GRAB_PAD * 2),
+            h: Math.max(GRAB_MIN, P.pieces[i].vh * ks * P.pieces[i].zoom + GRAB_PAD * 2)
           });
         }
         var rows = makeRows(P.pieces, shape);
@@ -1448,14 +1508,28 @@
         var pc = K.cars.create(id);
         var svg = pc.el;
         svg.classList.add("part-only");
-        var keep;
-        if (spec.kind === "tire") keep = [svg.querySelectorAll('[data-part="tire"]')[spec.index]];
-        else keep = partEls(svg, spec.parts);
+        var keep = partEls(svg, spec.parts);
         for (var i = 0; i < keep.length; i++) {
           if (keep[i]) keep[i].classList.add("part-keep");
         }
         var vw = rect.w + PAD * 2;
         var vh = rect.h + PAD * 2;
+        // 小さい部品は、トレーと持っているあいだだけ大きく見せる（余白こみの長い辺が 44 くらいに見える倍率。上限 2 倍）
+        var zoom = 1;
+        if (spec.zoom) {
+          // 余白こみの長い辺が ZOOM_TARGET に近づく倍率。上限は ZOOM_MAX（表で数を書いた部品は、その数）
+          var cap = spec.zoom === true ? ZOOM_MAX : spec.zoom;
+          zoom = Math.max(1, Math.min(cap, ZOOM_TARGET / Math.max(vw, vh)));
+        }
+        if (zoom > 1) {
+          // 拡大しても線が太くならないように、運ぶ絵の線の太さ（stroke-width）を 元の値 ÷ zoom に書き換える
+          // （部品の <g> の stroke-width="3" と、その子孫。くるま・ほかの部品と同じ見た目の太さになる）
+          var wides = svg.querySelectorAll("[stroke-width]");
+          for (var w = 0; w < wides.length; w++) {
+            var sw = parseFloat(wides[w].getAttribute("stroke-width"));
+            if (sw > 0) wides[w].setAttribute("stroke-width", String(sw / zoom));
+          }
+        }
         svg.setAttribute("viewBox", (rect.x - PAD) + " " + (rect.y - PAD) + " " + vw + " " + vh);
 
         var plate = div("piece-plate");       // 部品の台（この四角が、つかめる四角）
@@ -1466,12 +1540,16 @@
         el.setAttribute("data-kind", spec.kind);
         el.setAttribute("data-index", String(order));
         el.setAttribute("data-state", "tray");
+        // 入れ子の順：はねる箱 → 大きく見せる箱 → 絵（はねる高さが、倍率で増えないように）
         var hopEl = div("piece-hop kuruma-hop");   // はねる箱（ぴょん・えらんでね）
-        hopEl.appendChild(svg);
+        var zoomEl = div("piece-zoom");            // 大きく見せる箱（小さい部品だけ scale(zoom)。はまるとき 1 に戻る）
+        zoomEl.style.transform = "scale(" + zoom + ")";
+        zoomEl.appendChild(svg);
+        hopEl.appendChild(zoomEl);
         el.appendChild(hopEl);
         plate.appendChild(el);
         return {
-          kind: spec.kind, spec: spec, order: order, rect: rect, vw: vw, vh: vh,
+          kind: spec.kind, spec: spec, order: order, rect: rect, vw: vw, vh: vh, zoom: zoom, zoomEl: zoomEl,
           plate: plate, el: el, hopEl: hopEl, svg: svg, hopper: K.stage.hopper(hopEl),
           home: { left: 0, top: 0, width: 0, height: 0 },
           placed: false, drag: null, slot: null
@@ -1504,16 +1582,18 @@
           pieces: [], slots: []
         };
 
-        var tires = car.el.querySelectorAll('[data-part="tire"]');
         for (var i = 0; i < q.pieces.length; i++) {
           var spec = q.pieces[i];
-          var rect = rects[specKey(spec)];
+          var rect = rects[spec.index];
 
           // はめる場所：くるまの絵の、その部品を うすい形にする（2つ目からの data-part と、いっしょに かくす部品は かくす）
-          var slotEls = spec.kind === "tire" ? [tires[spec.index]] : partEls(car.el, [spec.parts[0]]);
+          var slotEls = partEls(car.el, [spec.parts[0]]);
           var j;
           for (j = 0; j < slotEls.length; j++) {
-            if (slotEls[j]) slotEls[j].classList.add("part-slot");
+            if (slotEls[j]) {
+              slotEls[j].classList.add("part-slot");
+              if (spec.zoom) slotEls[j].classList.add("part-slot-small");   // 小さい部品の場所は、濃く見せる
+            }
           }
           var missEls = partEls(car.el, spec.parts.slice(1).concat(spec.withParts));
           for (j = 0; j < missEls.length; j++) missEls[j].classList.add("part-missing");
@@ -1546,7 +1626,7 @@
         var P = { carWidth: cur.car.width, pieces: [], slots: [] };
         var i;
         for (i = 0; i < cur.pieces.length; i++) {
-          P.pieces.push({ kind: cur.pieces[i].kind, vw: cur.pieces[i].vw, vh: cur.pieces[i].vh });
+          P.pieces.push({ kind: cur.pieces[i].kind, vw: cur.pieces[i].vw, vh: cur.pieces[i].vh, zoom: cur.pieces[i].zoom });
         }
         for (i = 0; i < cur.slots.length; i++) {
           var s = cur.slots[i];
