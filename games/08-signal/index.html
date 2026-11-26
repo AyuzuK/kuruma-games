@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <!-- スマホやタブレットでもちょうどいい大きさで表示するための設定 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>はたらくくるま しんごうを タッチ！</title>
+
+  <!-- 全部のゲームで使う、共通の見た目（拡大を止める・大人用ボタン・指マーク・ぴょん・紙ふぶき） -->
+  <link rel="stylesheet" href="../../shared/kuruma-base.css">
+
+  <style>
+    /* =====================================================
+       「しんごうを タッチ！」
+       ・大きな信号をさわると、青 → 黄（ちょっとだけ）→ 赤 → 青 … と変わる
+       ・青：くるまが左から右へ走る。赤：信号の手前でゆっくり止まり、列になる
+       ・信号の状態（light）と、くるまの走り（cars）は、JavaScript の中でも別々に管理している
+       ===================================================== */
+
+    /* 画面の高さの 1% の単位（u）。dvh が使える端末では dvh、だめなら vh */
+    :root { --u: 1vh; }
+    @supports (height: 100dvh) {
+      :root { --u: 1dvh; }
+    }
+
+    body {
+      position: relative;            /* 中の絵（position: absolute）の基準にする */
+      background: #d8f0ff;          /* 空の色（背景の絵が出るまでの、念のための色） */
+      /* 下から順に：手前の歩道 11u、道 24u、奥の歩道 6u（くるまは道の上を走る） */
+      --front: calc(var(--u) * 11);
+      --road: calc(var(--u) * 24);
+      --back: calc(var(--u) * 6);
+      /* 信号の大きさ：ポールまでふくめた高さは、画面の高さの 66%（低い画面では上に 90px あける）。
+         幅は、高さの 0.3125 倍（絵の縦横比 100 : 320）。ただし画面の幅の 26% まで */
+      --sig-h: min(calc(var(--u) * 66), calc(var(--u) * 100 - 90px));
+      --sig-w: min(26vw, calc(var(--sig-h) * 0.3125));
+    }
+
+    /* 横幅がせまいとき（560px より小さい）は、上のボタンと文字の段が増えるので、信号の上の余白を 140px にする */
+    @media (max-width: 559.98px) {
+      body { --sig-h: min(calc(var(--u) * 66), calc(var(--u) * 100 - 140px)); }
+    }
+
+    /* ===== 背景：空と景色（上） ===== */
+    .scenery {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      /* 奥の歩道と 2px 重ねる（画面の高さが端数のとき、境目に 1px のすき間が出ないように） */
+      bottom: calc(var(--front) + var(--road) + var(--back) - 2px);
+      overflow: hidden;
+      --hills: min(max(33.4vw, 42%), 92%);
+      background: linear-gradient(#a9dcf5 0%, #e3f4fc 100%);
+    }
+    @media (orientation: portrait) {
+      .scenery { --hills: min(max(33.4vw, 50%), 92%); }
+    }
+
+    /* 雲：画面2つぶんの横長の帯に、同じ並びを2回置き、とてもゆっくり左へ流す（CSS だけで動かす）。
+       帯の半分（= 画面1つぶん）動いたところで最初に戻るので、つなぎ目が見えない。1周 160秒。
+       上の文字・大人用ボタンの後ろを通らないように、上から 84px より下に置く */
+    .clouds {
+      position: absolute;
+      left: 0;
+      top: 84px;
+      width: 200%;
+      height: max(50px, calc(100% - 84px - var(--hills) * 0.6));
+      animation: kumo 160s linear infinite;
+    }
+    @keyframes kumo {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-50%); }
+    }
+    .cloud {
+      position: absolute;
+      display: block;
+      height: auto;
+      aspect-ratio: 120 / 56;
+    }
+    .cloud-l { width: clamp(90px, 13vw, 190px); }
+    .cloud-m { width: clamp(70px, 9vw, 140px); }
+    @media (max-height: 500px) {
+      .cloud-l { width: 76px; }
+      .cloud-m { width: 60px; }
+    }
+
+    /* 丘とまるい低木（下のはしを、奥の歩道の上のふちに合わせる） */
+    .hills {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: var(--hills);
+      display: block;
+    }
+
+    /* 絵の部品（雲の形）を1か所に書いておくための、見えない SVG */
+    .svg-defs {
+      position: absolute;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+    }
+
+    /* 奥の歩道（クリーム色の帯） */
+    .sidewalk-back {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: calc(var(--front) + var(--road));
+      height: var(--back);
+      background: linear-gradient(#f6edd0 0, #f6edd0 calc(100% - 4px), #e6d8b0 calc(100% - 4px));
+    }
+    /* 道（灰色）。まん中に白い短い線（破線） */
+    .road {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: var(--front);
+      height: var(--road);
+      background: #b7bac0;
+    }
+    .road::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: 4px;
+      margin-top: -2px;
+      background: repeating-linear-gradient(90deg, #f4f4f2 0, #f4f4f2 52px, transparent 52px, transparent 104px);
+    }
+    /* 手前の歩道（クリーム色。つぎ目の線をうすく） */
+    .sidewalk-front {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: var(--front);
+      background:
+        repeating-linear-gradient(100deg, transparent 0, transparent 179px, #e6d8b0 179px, #e6d8b0 181px),
+        linear-gradient(#e6d8b0 0, #e6d8b0 4px, #f6edd0 4px);
+    }
+
+    /* ===== 上の文字「しんごうを さわってね！」 =====
+       広い画面（横幅 560px 以上）：上から 30px、右上の2つのボタンを避けて、左右に 160px ずつあける。
+       せまい画面（560px より小さい）：ボタンの段より下（上から 92px）に出す */
+    .message {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 30px;
+      padding: 0 160px;
+      font-size: clamp(18px, calc((100vw - 320px) / 12), 32px);
+      line-height: 1.3;
+      z-index: 2;
+    }
+    @media (max-width: 559.98px) {
+      .message {
+        top: 92px;
+        padding: 0 12px;
+        font-size: clamp(20px, 6vw, 32px);
+      }
+    }
+
+    /* ===== 大きな信号（絵は下の SVG。右はしから 40px 以上あける） =====
+       手前の歩道の上に立つので、道を走るくるまより手前に出る（くるまは信号のうしろを通りぬける） */
+    .signal {
+      position: absolute;
+      right: max(40px, 6vw);
+      bottom: 0;
+      width: var(--sig-w);
+      height: calc(var(--sig-w) * 3.2);
+      z-index: 2;
+      overflow: visible;
+    }
+    /* 灯：消えている灯は、くすんだ暗い色（.dim）。点いている灯（.lit）と、まわりの光（.glow）は、
+       ふだんは透明で、その色の番のときだけ、0.4秒かけてなめらかに現れる（点滅しない） */
+    .signal .lit,
+    .signal .glow {
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    .signal .mark {
+      opacity: 0.28;                 /* 消えている灯のマークは、うすく見える */
+      transition: opacity 0.4s ease;
+    }
+    .signal[data-light="red"]    .lamp-red .lit,
+    .signal[data-light="yellow"] .lamp-yellow .lit,
+    .signal[data-light="green"]  .lamp-green .lit { opacity: 1; }
+    .signal[data-light="red"]    .lamp-red .glow,
+    .signal[data-light="yellow"] .lamp-yellow .glow,
+    .signal[data-light="green"]  .lamp-green .glow { opacity: 1; }
+    .signal[data-light="red"]    .lamp-red .mark,
+    .signal[data-light="green"]  .lamp-green .mark { opacity: 1; }
+
+    /* ===== くるま =====
+       3つの箱を重ねて、役割を分けている（2本目と同じ）。
+         .car           … 左右の「位置」を受け持つ（JavaScript が translateX で動かす）。大きさは、見た目の大きさ
+         .car-size      … 図鑑の絵の大きさ（横 × 縦 220）のまま、縮めるだけ（左下を基準に）
+         .kuruma-hop    … 「ぴょん」を受け持つ
+         .kuruma-wobble … 図鑑の絵を入れる箱 */
+    .cars {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1;
+      pointer-events: none;          /* くるまの箱だけが、さわりを受ける */
+    }
+    .car {
+      position: absolute;
+      left: 0;
+      /* タイヤが、道の下がわに乗るように、少しだけ下げる */
+      bottom: calc(var(--front) + var(--road) * 0.5 - 6px);
+      pointer-events: auto;
+    }
+    .car-size {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      transform-origin: left bottom;
+    }
+    .car .kuruma-hop,
+    .car .kuruma-wobble {
+      position: absolute;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+    }
+
+    /* 指マークは、信号のそばに置く（場所と大きさは JavaScript が決める）。信号より手前に出す */
+    .finger-hint {
+      z-index: 3;
+    }
+
+    /* 動きを減らす設定では、雲の流れを止め、灯は動かさずに切りかえる */
+    @media (prefers-reduced-motion: reduce) {
+      .clouds { animation: none; }
+      .signal .lit,
+      .signal .glow,
+      .signal .mark { transition: none; }
+    }
+  </style>
+</head>
+<body data-scene="green">
+
+  <!-- 雲の形（ここに1回だけ書いて、<use> で何回も使う）。この SVG 自体は見えない -->
+  <svg class="svg-defs" aria-hidden="true" focusable="false">
+    <defs>
+      <g id="bgCloud">
+        <path fill="#dcebf7"
+              d="M 14 52 Q 2 52 4 42 Q 6 32 18 34 Q 20 18 38 20 Q 46 8 62 12 Q 76 6 84 20 Q 100 16 104 30 Q 118 32 116 44 Q 114 54 102 54 Z"/>
+        <path fill="#ffffff"
+              d="M 14 47 Q 2 47 4 37 Q 6 27 18 29 Q 20 13 38 15 Q 46 3 62 7 Q 76 1 84 15 Q 100 11 104 25 Q 118 27 116 39 Q 114 48 102 48 Z"/>
+      </g>
+    </defs>
+  </svg>
+
+  <!-- ===== 背景（空・雲・丘・歩道・道） ===== -->
+  <div class="scenery" aria-hidden="true">
+    <div class="clouds">
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 4%; top: 8%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-m" viewBox="0 0 120 56" style="left: 24%; top: 42%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 40%; top: 2%;"><use href="#bgCloud"/></svg>
+
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 54%; top: 8%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-m" viewBox="0 0 120 56" style="left: 74%; top: 42%;"><use href="#bgCloud"/></svg>
+      <svg class="cloud cloud-l" viewBox="0 0 120 56" style="left: 90%; top: 2%;"><use href="#bgCloud"/></svg>
+    </div>
+
+    <!-- やわらかい緑の丘を2色重ね、丘の前にまるい低木。横長の絵を画面いっぱいに広げて、はみ出た左右は切る -->
+    <svg class="hills" viewBox="0 0 1200 300" preserveAspectRatio="xMidYMax slice">
+      <path fill="#bfe3a6"
+            d="M 0 170 C 150 110 300 100 440 140 C 560 174 660 150 780 118 C 900 84 1040 92 1200 140 L 1200 300 L 0 300 Z"/>
+      <path fill="#a4d487"
+            d="M 0 224 C 140 186 280 182 420 204 C 560 228 700 214 820 192 C 960 166 1080 178 1200 200 L 1200 300 L 0 300 Z"/>
+      <path fill="#8cc56e"
+            d="M 0 272 C 200 258 420 266 640 262 C 860 258 1040 256 1200 266 L 1200 300 L 0 300 Z"/>
+      <!-- まるい低木（濃いめの緑） -->
+      <g>
+        <g fill="#5fa05a">
+          <circle cx="90" cy="262" r="34"/><circle cx="130" cy="268" r="28"/><circle cx="56" cy="270" r="24"/>
+        </g>
+        <g fill="#6fb066">
+          <circle cx="100" cy="254" r="22"/><circle cx="124" cy="262" r="16"/>
+        </g>
+        <g fill="#5fa05a">
+          <circle cx="470" cy="264" r="26"/><circle cx="500" cy="270" r="20"/>
+        </g>
+        <g fill="#5fa05a">
+          <circle cx="760" cy="262" r="30"/><circle cx="796" cy="268" r="24"/><circle cx="730" cy="270" r="20"/>
+        </g>
+        <g fill="#6fb066">
+          <circle cx="766" cy="254" r="18"/>
+        </g>
+        <g fill="#5fa05a">
+          <circle cx="1090" cy="262" r="34"/><circle cx="1134" cy="268" r="28"/><circle cx="1050" cy="270" r="22"/>
+        </g>
+        <g fill="#6fb066">
+          <circle cx="1100" cy="254" r="21"/>
+        </g>
+      </g>
+    </svg>
+  </div>
+  <div class="sidewalk-back" aria-hidden="true"></div>
+  <div class="road" aria-hidden="true"></div>
+  <div class="sidewalk-front" aria-hidden="true"></div>
+
+  <p class="kuruma-message message">しんごうを さわってね！</p>
+
+  <!-- 大人用のボタン（どちらも2秒長押し）。トップ画面へ戻る・音を消す -->
+  <button class="adult-btn home-btn" id="homeBtn" type="button" aria-label="もどる（2びょう ながおし）">
+    <!-- おうちの形（三角の屋根、四角いかべ、まん中に戸） -->
+    <svg viewBox="0 0 26 26" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="#5a3d1e" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M 6 11.5 L 6 23 L 20 23 L 20 11.5" fill="#fff3c4"/>
+        <path d="M 2.5 13 L 13 3.5 L 23.5 13"/>
+        <path d="M 10.5 23 L 10.5 17 L 15.5 17 L 15.5 23"/>
+      </g>
+    </svg>
+  </button>
+  <button class="adult-btn mute-btn" id="muteBtn" type="button" aria-label="おとを けす（2びょう ながおし）">🔊</button>
+
+  <!-- くるまを入れる層（くるまの箱は、JavaScript がここに足す） -->
+  <div class="cars" id="cars"></div>
+
+  <!-- ===== 大きな信号（上から 赤・黄・青）=====
+       色だけでなく、位置と形でも分かるようにする：赤＝開いた手のひら、青＝右向きの矢印、黄＝マークなし。
+       座標の枠は 横100 × 縦320。箱は y 4〜226、ポールは下のはしまで -->
+  <svg class="signal" id="signal" viewBox="0 0 100 320" data-light="green" aria-hidden="true" focusable="false">
+    <defs>
+      <!-- 点いている灯のまわりの、やわらかい光（ふちへいくほど透明） -->
+      <radialGradient id="glowRed">
+        <stop offset="0.45" stop-color="#ff7a68" stop-opacity="0.75"/>
+        <stop offset="1" stop-color="#ff7a68" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="glowYellow">
+        <stop offset="0.45" stop-color="#ffd95a" stop-opacity="0.75"/>
+        <stop offset="1" stop-color="#ffd95a" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="glowGreen">
+        <stop offset="0.45" stop-color="#58e0c0" stop-opacity="0.7"/>
+        <stop offset="1" stop-color="#58e0c0" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+
+    <!-- ポールと、足もとの台 -->
+    <rect x="43" y="220" width="14" height="94" fill="#8b9099" stroke="#5a3d1e" stroke-width="2.5"/>
+    <rect x="47" y="224" width="3" height="86" fill="#a9aeb6"/>
+    <rect x="32" y="306" width="36" height="14" rx="6" fill="#7d838c" stroke="#5a3d1e" stroke-width="2.5"/>
+
+    <!-- 箱（角の丸い灰色） -->
+    <rect x="8" y="4" width="84" height="222" rx="26" fill="#868c95" stroke="#5a3d1e" stroke-width="2.5"/>
+    <rect x="14" y="10" width="72" height="210" rx="21" fill="none" stroke="#a6abb3" stroke-width="2"/>
+
+    <!-- 上：赤（手のひらのマーク） -->
+    <g class="lamp lamp-red">
+      <circle cx="50" cy="48" r="32" fill="#5d636b"/>
+      <circle class="dim" cx="50" cy="48" r="27" fill="#7c3b3a"/>
+      <circle class="glow" cx="50" cy="48" r="46" fill="url(#glowRed)"/>
+      <circle class="lit" cx="50" cy="48" r="27" fill="#f2584a"/>
+      <!-- 手のひら：てのひらを前に向けた、やさしい形（手の甲の四角、指4本、親指） -->
+      <g class="mark" fill="#fff1e0" stroke="#d9a98a" stroke-width="1.2" stroke-linejoin="round">
+        <rect x="41" y="50" width="18" height="16" rx="6"/>
+        <rect x="41" y="34" width="4.8" height="22" rx="2.4"/>
+        <rect x="45.8" y="30" width="4.8" height="26" rx="2.4"/>
+        <rect x="50.6" y="31" width="4.8" height="25" rx="2.4"/>
+        <rect x="55.4" y="35" width="4.4" height="21" rx="2.2"/>
+        <rect x="32.5" y="48" width="5.4" height="14" rx="2.7" transform="rotate(-35 35.2 55)"/>
+      </g>
+    </g>
+
+    <!-- まん中：黄（マークなし。青から赤になるあいだだけ点く） -->
+    <g class="lamp lamp-yellow">
+      <circle cx="50" cy="115" r="32" fill="#5d636b"/>
+      <circle class="dim" cx="50" cy="115" r="27" fill="#84713a"/>
+      <circle class="glow" cx="50" cy="115" r="46" fill="url(#glowYellow)"/>
+      <circle class="lit" cx="50" cy="115" r="27" fill="#f8c93c"/>
+    </g>
+
+    <!-- 下：青（青みどり。右向きの矢印のマーク） -->
+    <g class="lamp lamp-green">
+      <circle cx="50" cy="182" r="32" fill="#5d636b"/>
+      <circle class="dim" cx="50" cy="182" r="27" fill="#2c6a62"/>
+      <circle class="glow" cx="50" cy="182" r="46" fill="url(#glowGreen)"/>
+      <circle class="lit" cx="50" cy="182" r="27" fill="#34bfa0"/>
+      <path class="mark" d="M 33 177 L 51 177 L 51 168 L 68 182 L 51 196 L 51 187 L 33 187 Z"
+            fill="#f1fff9" stroke="#bfe6da" stroke-width="1.2" stroke-linejoin="round"/>
+    </g>
+  </svg>
+
+  <!-- 全部のゲームで使う、共通の部品（音 → BGM → さわる操作 → くるまの図鑑 → 順番と動き の順に読み込む） -->
+  <script src="../../shared/kuruma-sound.js"></script>
+  <script src="../../shared/kuruma-bgm.js"></script>
+  <script src="../../shared/kuruma-touch.js"></script>
+  <script src="../../shared/kuruma-cars.js"></script>
+  <script src="../../shared/kuruma-stage.js"></script>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var K = window.Kuruma;
+
+      // ===== 設定（数字を変えると動きが変わります。多くは実物で測って合わせる目安） =====
+      // 出てくるくるま8台（図鑑が増えても、このゲームが勝手に変わらないように、ここにはっきり書く）。
+      // 袋に入れてまぜ、8台が1回ずつ出たらまぜ直す。となり合うくるまの色が、できるだけ かぶらない
+      var IDS = ["bus", "fire", "mixer", "garbage", "taxi", "crane", "police", "dump"];
+      var HOME_URL = "../../index.html";   // トップ画面
+      var YELLOW_MS = 600;       // 黄が点いている時間（ミリ秒）
+      var LAUNCH_FIRST = 320;    // 青になってから、先頭が走り出すまで（ミリ秒）
+      var LAUNCH_STEP = 380;     // 列の次のくるまが走り出すまでの間（ミリ秒。0.3〜0.5秒）
+      var SPAWN_GREEN = 700;     // 青で、くるまが走りさってから、次が入ってくるまで（ミリ秒）
+      var SPAWN_RED = 1500;      // 赤で、列に次のくるまが入ってくるまでの間（ミリ秒）
+      var SPAWN_RED_FIRST = 900; // 赤になって、列がからのとき、最初のくるまが入ってくるまで（ミリ秒）
+      var AFTER_CONFETTI = 1400; // 紙ふぶきのあと、次のくるまが入ってくるまで（ミリ秒）
+      var MAX_QUEUE = 3;         // 赤で並ぶ、いちばん多い台数
+      var EASE_STOP = "cubic-bezier(0.5, 1, 0.89, 1)";    // ゆっくり止まる（だんだん おそく）
+      var EASE_START = "cubic-bezier(0.5, 0, 0.75, 0.75)"; // 走り出す（だんだん はやく）
+
+      // ページの部品
+      var body = document.body;
+      var signalEl = document.getElementById("signal");
+      var carsLayer = document.getElementById("cars");
+      var message = document.querySelector(".message");
+      var muteBtn = document.getElementById("muteBtn");
+      var homeBtn = document.getElementById("homeBtn");
+
+      // 共通の部品
+      var order = K.stage.randomOrder(IDS, function (id) { return K.cars.get(id).color; }, Math.random);
+
+      // 指マーク：最初の1回だけ、信号の赤い丸のあたりを指す。さわったら消して、もう出さない
+      var hint = K.touch.createHint();
+      document.body.appendChild(hint);
+
+      // ===== 状態 =====
+      // 信号の状態（light）：green・yellow・red。くるまの走りとは別に管理する
+      var light = "green";
+      var yellowTimer = null;    // 黄 → 赤の予約（いつも1つだけ。連打しても二重にならない）
+      var spawnTimer = null;     // 次のくるまを出す予約（いつも1つだけ）
+      var launchTimers = [];     // 列を順に走り出させる予約
+      var pendingLaunch = 0;     // まだ走り出していない列のくるまの数
+      var releasing = false;     // 青になって、列を走り出させているところか
+      var queue = [];            // 赤で止まった（止まりかけの）くるま。先頭（信号にいちばん近い）から順
+      var runners = [];          // 走っているくるま（赤で止まらない・走りさるくるま）
+      var carById = {};          // くるまの箱の data-cid → くるま
+      var carCounter = 0;
+      var touched = false;       // 画面を一度でもさわったか（さわるまでは、くるまの音を鳴らさない）
+      var lastToggle = 0;        // 前に信号を切りかえた時刻（動きを減らす設定のとき用）
+      var reduceMotion = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+      var pendingId = null;     // 次に出す予定のくるま（入る場所があるか見てから、出す）
+
+      // ===== 大きさ・場所（layout で決める） =====
+      var scale = 1;         // くるまを縮める率
+      var speed = 220;       // 走る速さ（px / 秒）
+      var stopFront = 300;   // 赤で止まるとき、くるまの前のはしを置く場所（画面の左から）
+      var gapQ = 16;         // 列のくるまの間
+
+      function clamp(lo, v, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+      // ===== 今の場面を、<body> に書く（テストの台本が場面を待てるように） =====
+      //   green・yellow・red（止まっているくるまが1台以下）・red-queue（2台以上）
+      function updateScene() {
+        var scene = light;
+        if (light === "red") {
+          var stopped = 0;
+          for (var i = 0; i < queue.length; i++) if (queue[i].arrived) stopped++;
+          if (stopped >= 2) scene = "red-queue";
+        }
+        body.setAttribute("data-scene", scene);
+      }
+
+      // ===== 大きさと場所を決める（開いたとき・回転したとき） =====
+      function layout() {
+        var w = window.innerWidth;
+        var r = signalEl.getBoundingClientRect();
+        stopFront = r.left - clamp(14, w * 0.05, 60);   // 信号の左に、すきまをあけて止まる
+        gapQ = clamp(10, w * 0.04, 28);
+        speed = clamp(170, w * 0.32, 300);
+        // くるまの大きさ：図鑑の縮め方に、信号の左に 2台ぶん入るくらいの広さも合わせる
+        var avail = stopFront - 8;
+        scale = Math.max(0.36, Math.min(K.touch.fitScale(), avail / 580, 1));
+
+        // いるくるまにも、新しい大きさを合わせる
+        var id;
+        for (id in carById) {
+          if (carById.hasOwnProperty(id)) applySize(carById[id]);
+        }
+        // 止まっている列は、新しい場所へ すぐに移す
+        // （止まりかけのくるまは、止まった扱いにする。仕事の動きと音は出さない）
+        // 赤のときだけ行う（青・黄のあいだは、列を動かさない）
+        var prev = null;
+        for (var i = 0; light === "red" && i < queue.length; i++) {
+          var c = queue[i];
+          var x = (prev === null) ? stopFront - c.w : prev - gapQ - c.w;
+          jumpTo(c, x);
+          if (!c.arrived) c.arrived = true;
+          prev = x;
+        }
+        // 走っているくるまは、いまの位置から、新しい出口へ走り直す（回転しても途中で消えない）
+        for (var j = 0; j < runners.length; j++) {
+          (function (r) {
+            var cur = curX(r);
+            var ms = Math.max(300, (K.stage.exitX() - cur) / speed * 1000);
+            driveTo(r, K.stage.exitX(), ms, "linear", function () {
+              removeCar(r);
+              afterCarGone();
+            });
+          })(runners[j]);
+        }
+        updateScene();
+        placeHint();
+        // 赤で、止まりかけのくるまの「次を出す予約」がとだえないようにする
+        if (light === "red" && canQueueMore()) scheduleSpawn(SPAWN_RED);
+      }
+
+      function applySize(c) {
+        c.w = c.car.width * scale;
+        c.box.style.width = c.w + "px";
+        c.box.style.height = (c.car.height * scale) + "px";
+        c.size.style.transform = "scale(" + scale + ")";
+      }
+
+      // ===== 指マークの場所：信号のいちばん上（赤い丸の上のふち）を、上から指す =====
+      function placeHint() {
+        var r = signalEl.getBoundingClientRect();
+        var tipX = r.left + r.width * 0.5;
+        var tipY = r.top + r.height * (24 / 320);
+        var fit = K.touch.hintFit(tipX, tipY, [message, homeBtn, muteBtn]);
+        hint.style.setProperty("--hs", fit.scale);
+        hint.style.left = (tipX - K.touch.HINT_TIP_X * fit.scale) + "px";
+        hint.style.top = (tipY - K.touch.HINT_HEIGHT * fit.scale + fit.drop) + "px";
+      }
+
+      // ===== くるまを作る・動かす =====
+      function nextId() {
+        if (!pendingId) pendingId = order.next();
+        return pendingId;
+      }
+
+      // 図鑑のくるまを作って、画面の左の外に置く
+      function makeCar() {
+        var id = nextId();
+        pendingId = null;
+        var car = K.cars.create(id);
+        var box = document.createElement("div");
+        box.className = "car";
+        var size = document.createElement("div");
+        size.className = "car-size";
+        size.style.width = car.width + "px";
+        size.style.height = car.height + "px";
+        var hopBox = document.createElement("div");
+        hopBox.className = "kuruma-hop";
+        var wobble = document.createElement("div");
+        wobble.className = "kuruma-wobble";
+        wobble.appendChild(car.el);
+        hopBox.appendChild(wobble);
+        size.appendChild(hopBox);
+        box.appendChild(size);
+
+        carCounter++;
+        var c = {
+          cid: "c" + carCounter, id: id, car: car, box: box, size: size,
+          hopper: K.stage.hopper(hopBox),
+          w: 0, x: 0, arrived: false, timer: null
+        };
+        box.setAttribute("data-cid", c.cid);
+        carById[c.cid] = c;
+        applySize(c);
+        carsLayer.appendChild(box);                 // 画面に入れてから位置を決める（出発点が確定するように）
+        jumpTo(c, K.stage.enterX(c.w));
+        return c;
+      }
+
+      // 一瞬で x へ移す（アニメーションなし）
+      function jumpTo(c, x) {
+        clearTimeout(c.timer);
+        c.box.classList.remove("moving");
+        c.box.style.transition = "none";
+        c.box.style.transform = "translateX(" + x + "px)";
+        c.x = x;
+        void c.box.offsetWidth;   // ブラウザに一度反映させる（次の移動がアニメーションになるように）
+      }
+
+      // ms ミリ秒かけて x へ動かす。動いているあいだだけ、タイヤが回る。終わったら onEnd(c)
+      function driveTo(c, x, ms, ease, onEnd) {
+        clearTimeout(c.timer);
+        c.box.style.transition = "transform " + ms + "ms " + ease;
+        c.box.style.transform = "translateX(" + x + "px)";
+        c.x = x;
+        c.box.classList.add("moving");
+        c.timer = setTimeout(function () {
+          c.box.classList.remove("moving");
+          if (onEnd) onEnd(c);
+        }, ms);
+      }
+
+      // いまの（動いている途中の）左の位置
+      function curX(c) {
+        var t = window.getComputedStyle(c.box).transform;
+        if (!t || t === "none") return c.x;
+        var m = t.match(/^matrix\(([^)]+)\)/);
+        if (m) return parseFloat(m[1].split(",")[4]);
+        var m3 = t.match(/^matrix3d\(([^)]+)\)/);       // 4×4 の値の13番目が x
+        return m3 ? parseFloat(m3[1].split(",")[12]) : c.x;
+      }
+
+      function removeFrom(list, c) {
+        var i = list.indexOf(c);
+        if (i >= 0) list.splice(i, 1);
+      }
+
+      // くるまを画面から消す
+      function removeCar(c) {
+        clearTimeout(c.timer);
+        removeFrom(runners, c);
+        removeFrom(queue, c);
+        delete carById[c.cid];
+        if (c.box.parentNode) c.box.parentNode.removeChild(c.box);
+      }
+
+      // ===== 次のくるまを出す予約（いつも1つだけ） =====
+      function scheduleSpawn(delay) {
+        clearTimeout(spawnTimer);
+        spawnTimer = setTimeout(spawnTick, delay);
+      }
+
+      function spawnTick() {
+        if (light === "green") {
+          // 青：走っているくるまも、列もなく、列を走り出させてもいないときだけ、1台入れる
+          if (runners.length === 0 && queue.length === 0 && !releasing) spawnPass();
+        } else if (light === "red") {
+          // 赤：止まりかけのくるまがいたら、少し待つ。列に入る場所があれば、うしろに1台つなぐ
+          for (var i = 0; i < queue.length; i++) {
+            if (!queue[i].arrived) { scheduleSpawn(400); return; }
+          }
+          if (canQueueMore()) spawnQueueCar();
+        }
+        // 黄のあいだは出さない（赤になったときに、あらためて予約する）
+      }
+
+      // 青：左から入って、右へ走りさる（1台ずつ）
+      function spawnPass() {
+        var c = makeCar();
+        runners.push(c);
+        var exit = K.stage.exitX();
+        var ms = (exit - c.x) / speed * 1000;
+        if (touched) K.sound.playDrive(0.8);   // 最初にさわるまでは、音を鳴らさない
+        driveTo(c, exit, ms, "linear", function () {
+          removeCar(c);
+          afterCarGone();
+        });
+      }
+
+      // 列にもう1台入る場所があるか（入る場所がなければ、赤のあいだは もう出さない）
+      function canQueueMore() {
+        if (queue.length >= MAX_QUEUE) return false;
+        var w = K.cars.get(nextId()).width * scale;
+        var left = queue.length ? queue[queue.length - 1].x - gapQ - w : stopFront - w;
+        return left >= 6;
+      }
+
+      // 赤：左から入って、列のうしろ（いちばん信号から遠いところ）へ、ゆっくり止まる
+      function spawnQueueCar() {
+        var c = makeCar();
+        var target = queue.length ? queue[queue.length - 1].x - gapQ - c.w : stopFront - c.w;
+        queue.push(c);
+        driveStop(c, target);
+        updateScene();
+      }
+
+      // 止まる場所 target へ、だんだんおそくなりながら動かす。着いたら仕事の動きと音
+      function driveStop(c, target) {
+        c.arrived = false;
+        var d = target - curX(c);
+        var ms = Math.max(800, 2 * d / speed * 1000);   // 走ってきた速さから、ちょうど止まる時間
+        driveTo(c, target, ms, EASE_STOP, onStopped);
+      }
+      function onStopped(c) {
+        c.arrived = true;
+        c.car.work();     // 仕事の動き（図鑑のもの）を1回
+        c.car.sound();    // 新しく止まった1台ぶんだけ
+        updateScene();
+        if (light === "red") scheduleSpawn(SPAWN_RED);
+      }
+
+      // くるまが1台、画面から出たあと
+      function afterCarGone() {
+        if (light !== "green") return;
+        if (releasing) {
+          // 列を走り出させている途中：全部走りさったら、紙ふぶき
+          if (pendingLaunch === 0 && queue.length === 0 && runners.length === 0) {
+            releasing = false;
+            K.stage.confetti();
+            scheduleSpawn(AFTER_CONFETTI);
+          }
+        } else if (runners.length === 0 && queue.length === 0) {
+          scheduleSpawn(SPAWN_GREEN);
+        }
+      }
+
+      // ===== 信号の切りかえ =====
+      function setLight(value) {
+        light = value;
+        signalEl.setAttribute("data-light", value);
+        updateScene();
+      }
+
+      // 赤のときの低くて丸い短い音（0.2秒）
+      function playRedSound() {
+        var ctx = K.sound.beginSound(0.2, false);
+        if (!ctx) return;
+        K.sound.tone(ctx, "sine", 330, 262, ctx.currentTime, 0.2, 0.3, 0);
+      }
+
+      // 青 → 黄（予約は1つだけ）
+      function goYellow() {
+        clearTimeout(yellowTimer);
+        clearTimeout(spawnTimer);
+        cancelLaunch();
+        setLight("yellow");
+        yellowTimer = setTimeout(goRed, YELLOW_MS);
+      }
+
+      // → 赤：まだ信号を通りすぎていないくるまは、列になってゆっくり止まる
+      function goRed() {
+        clearTimeout(yellowTimer);
+        clearTimeout(spawnTimer);
+        cancelLaunch();
+        lastToggle = Date.now();   // 自動の切りかえも、250ms の起点にする
+        setLight("red");
+        playRedSound();
+        settle();
+        scheduleSpawn(queue.length ? SPAWN_RED : SPAWN_RED_FIRST);
+      }
+
+      // 赤になったとき：列と、まだ止まれる走行中のくるまを、前から順に止まる場所へ
+      function settle() {
+        var list = queue.slice();
+        var i;
+        for (i = runners.length - 1; i >= 0; i--) {
+          var r = runners[i];
+          // 前のはしが、止まる線をこえているくるま（信号を通りすぎるくるま）は、そのまま走りきる
+          if (curX(r) + r.w <= stopFront + 2) {
+            list.push(r);
+            runners.splice(i, 1);
+          }
+        }
+        for (i = 0; i < list.length; i++) list[i].cur = curX(list[i]);
+        list.sort(function (a, b) { return b.cur - a.cur; });   // 信号にいちばん近いものが先頭
+        queue = list;
+
+        var prev = null;
+        for (i = 0; i < queue.length; i++) {
+          var c = queue[i];
+          var target = (prev === null) ? stopFront - c.w : prev - gapQ - c.w;
+          if (target < c.cur) target = c.cur;                    // うしろへは戻らない
+          prev = target;
+          var d = target - c.cur;
+          if (d > 2) {
+            driveStop(c, target);                                // 止まる場所へ、ゆっくり
+          } else {
+            jumpTo(c, target);                                   // もう着いている（走っていた動きは止める）
+            if (!c.arrived) onStopped(c);
+          }
+        }
+        updateScene();
+      }
+
+      // 赤 → 青：列の先頭から順に（0.3〜0.5秒ずつずらして）走り出す
+      function goGreen() {
+        clearTimeout(yellowTimer);
+        clearTimeout(spawnTimer);
+        cancelLaunch();
+        // 止まりかけのくるまの「止まった処理（仕事の動き・音）」の予約をやめる（青で出ないように）
+        for (var q = 0; q < queue.length; q++) {
+          if (!queue[q].arrived) clearTimeout(queue[q].timer);
+        }
+        setLight("green");
+        K.sound.playArrive();
+
+        var n = queue.length;
+        if (n === 0) {
+          // 列がなければ、少しして、くるまが左から入ってくる
+          scheduleSpawn(runners.length === 0 ? SPAWN_GREEN : SPAWN_GREEN + 600);
+          return;
+        }
+        releasing = true;
+        pendingLaunch = n;
+        var firstOne = true;
+        for (var k = 0; k < n; k++) {
+          (function (isFirst) {
+            launchTimers.push(setTimeout(function () { launchFront(isFirst); }, LAUNCH_FIRST + k * LAUNCH_STEP));
+          })(firstOne);
+          firstOne = false;
+        }
+      }
+
+      // 列の先頭の1台を走り出させる（isFirst：音を鳴らすのは、代表の1台だけ）
+      function launchFront(isFirst) {
+        pendingLaunch = Math.max(0, pendingLaunch - 1);
+        var c = queue.shift();
+        if (!c) { afterCarGone(); return; }
+        runners.push(c);
+        c.arrived = true;
+        var exit = K.stage.exitX();
+        var cur = curX(c);
+        var ms = Math.max(900, (exit - cur) / (speed * 1.1) * 1000);
+        if (isFirst) K.sound.playDrive(0.8);
+        driveTo(c, exit, ms, EASE_START, function () {
+          removeCar(c);
+          afterCarGone();
+        });
+        updateScene();
+      }
+
+      // 走り出しの予約を、全部やめる（まだ走り出していないくるまは、列に残る）
+      function cancelLaunch() {
+        for (var i = 0; i < launchTimers.length; i++) clearTimeout(launchTimers[i]);
+        launchTimers = [];
+        pendingLaunch = 0;
+        releasing = false;
+      }
+
+      function toggleLight() {
+        // 動きを減らす設定のときだけ：前の切りかえから 250ms たたないうちのさわりは、無視（点滅に見えないように）
+        var now = Date.now();
+        if (reduceMotion && reduceMotion.matches && now - lastToggle < 250) return;
+        lastToggle = now;
+        if (light === "green") goYellow();
+        else if (light === "yellow") goRed();     // 黄のあいだにさわったら、待たずに赤へ（予約は増やさない）
+        else goGreen();
+      }
+
+      // ===== くるまをさわったとき（無反応にしない） =====
+      function carTap(c) {
+        if (!c) return;
+        if (queue.indexOf(c) >= 0 && c.arrived) {
+          // 止まっているくるま：仕事の動き＋音
+          c.car.work();
+          c.car.sound();
+        } else {
+          // 走っているくるま：「プッ」と小さくはねる
+          K.sound.playHorn();
+          c.hopper.hop();
+        }
+      }
+
+      // ===== 画面のどこかに指がふれた瞬間 =====
+      // （大人用のボタンへのタッチと、2本目からの指は、共通の部品が はぶいてくれる）
+      K.touch.onTap(function (e) {
+        K.touch.hideHint(hint);      // さわったので、指マークを消す（もう出さない）
+        var carEl = e.target && e.target.closest ? e.target.closest(".car") : null;
+        if (carEl) {
+          carTap(carById[carEl.getAttribute("data-cid")]);
+          return;
+        }
+        toggleLight();
+      });
+
+      // 一度でもさわったら（信号・大人用ボタンのどれでも）、くるまの音を鳴らしてよい
+      document.addEventListener("pointerdown", function () {
+        touched = true;
+        K.sound.prepare();   // 音の準備（iPhone・iPad 用）
+      }, true);
+      // 画面がかくれたら、さわる前の状態にもどす（もどったとき、いきなり音が鳴らないように）
+      document.addEventListener("visibilitychange", function () {
+        if (document.hidden) touched = false;
+      });
+      // 長押しメニューを出さない
+      document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+      // 画面の大きさ・回転が変わったら、場所と大きさを計算し直す
+      K.touch.onViewportChange(layout);
+
+      // ===== 大人用のボタン =====
+      // 音を消す・出すを切りかえたら、ボタンの大きさが変わるので、指マークの場所を計算し直す
+      K.touch.setupMuteButton(muteBtn, function () {
+        placeHint();
+        setTimeout(placeHint, 250);
+      });
+      K.touch.setupHomeButton(homeBtn, HOME_URL);
+
+      // ===== 最初の準備：青から始める（最初のくるまが、少しして左から入ってくる） =====
+      layout();
+      K.touch.showHint(hint);
+      setLight("green");
+      scheduleSpawn(500);
+    })();
+  </script>
+
+</body>
+</html>
