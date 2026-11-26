@@ -386,8 +386,8 @@
       height: 66px;
       background: linear-gradient(#f3e8c8 0, #f3e8c8 14px, #b9bcc2 14px);
     }
-    /* 小さな信号（赤・黄・青の3つの丸）と、遠くの丘（ゲームの絵を単純にして写したもの）。
-       座標の枠は 横300 × 縦240（ボタンの中と同じ大きさ）。id は使わない */
+    /* 横向きの信号（左から 青・黄・赤）と柱、遠くの丘（ゲームの絵を写したもの）。
+       座標の枠は 横300 × 縦240（ボタンの中と同じ大きさ）。id は top8- で始める */
     .signal-svg {
       position: absolute;
       left: 0;
@@ -1035,35 +1035,52 @@
        ファイルをダブルクリックで開いたときも動くように、index.html まで書く -->
   <a class="game-button signal-button" data-name="しんごうを/タッチ！" id="top8-signalGame" href="games/08-signal/index.html" aria-label="しんごうを タッチ">
     <div class="signal-floor"></div>
-    <!-- 小さな信号（赤・黄・青の3つの丸。赤に手のひら、青に右向きの矢印）と、遠くのやわらかい丘。
-         止まった絵で、文字は入れない -->
+    <!-- 横向きの信号（左から 青・黄・赤。赤が点いていて手のひら、青は消えていて右向きの矢印がうすく見える）と、
+         右がわの柱と腕、遠くのやわらかい丘。止まった絵で、文字は入れない -->
     <svg class="signal-svg" viewBox="0 0 300 240" aria-hidden="true" focusable="false">
-      <!-- 遠くの丘 -->
-      <ellipse cx="60" cy="178" rx="120" ry="42" fill="#b5df9b"/>
-      <ellipse cx="250" cy="184" rx="110" ry="36" fill="#9ccf7f"/>
-      <!-- 信号のポールと、まわりの道に落ちる影 -->
-      <ellipse cx="150" cy="232" rx="40" ry="6" fill="#5a3d1e" opacity="0.2"/>
-      <rect x="141" y="150" width="18" height="84" fill="#8b9099" stroke="#5a3d1e" stroke-width="3"/>
-      <!-- 信号の箱 -->
-      <rect x="86" y="6" width="128" height="166" rx="26" fill="#868c95" stroke="#5a3d1e" stroke-width="3"/>
-      <!-- 赤（点いている。手のひらのマーク） -->
-      <circle cx="150" cy="40" r="25" fill="#5d636b"/>
-      <circle cx="150" cy="40" r="21" fill="#f2584a"/>
-      <g fill="#fff1e0" stroke="#d9a98a" stroke-width="1">
-        <rect x="143" y="34" width="14" height="12" rx="4.5"/>
-        <rect x="143" y="22" width="3.6" height="16" rx="1.8"/>
-        <rect x="147" y="19" width="3.6" height="19" rx="1.8"/>
-        <rect x="150.6" y="20" width="3.6" height="18" rx="1.8"/>
-        <rect x="154.2" y="23" width="3.2" height="15" rx="1.6"/>
-        <rect x="136.5" y="33" width="4" height="10" rx="2" transform="rotate(-35 138.5 38)"/>
+      <defs>
+        <!-- 赤のまわりの、やわらかい光（ふちへいくほど透明） -->
+        <radialGradient id="top8-glowRed">
+          <stop offset="0.45" stop-color="#ff7a68" stop-opacity="0.75"/>
+          <stop offset="1" stop-color="#ff7a68" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <!-- 遠くの丘（下のはしは、歩道の上のふち y 174 に合わせる） -->
+      <path d="M 0 146 C 34 128 92 130 130 150 C 150 160 164 168 180 174 L 0 174 Z" fill="#b5df9b"/>
+      <path d="M 112 174 C 156 150 204 142 248 150 C 272 154 288 160 300 166 L 300 174 Z" fill="#9ccf7f"/>
+      <!-- 柱と腕（箱より先に書いて、箱のうしろに描く）。柱の足もとは歩道 -->
+      <g stroke="#5a3d1e" stroke-width="2.5" stroke-linejoin="round">
+        <rect x="238" y="79" width="42" height="15" fill="#8b9099"/>
+        <rect x="239" y="80.5" width="39" height="4.5" fill="#a9aeb6" stroke="none"/>
+        <rect x="270" y="72" width="16" height="110" rx="5" fill="#8b9099"/>
+        <rect x="274" y="74" width="4" height="106" fill="#a9aeb6" stroke="none"/>
+        <rect x="261" y="172" width="34" height="14" rx="6" fill="#7d838c"/>
       </g>
-      <!-- 黄（消えている） -->
-      <circle cx="150" cy="89" r="25" fill="#5d636b"/>
-      <circle cx="150" cy="89" r="21" fill="#84713a"/>
-      <!-- 青（消えている。右向きの矢印がうすく見える） -->
-      <circle cx="150" cy="138" r="25" fill="#5d636b"/>
-      <circle cx="150" cy="138" r="21" fill="#2c6a62"/>
-      <path d="M 138 135 L 150 135 L 150 128 L 163 138 L 150 148 L 150 141 L 138 141 Z" fill="#f1fff9" opacity="0.35" stroke-linejoin="round"/>
+      <!-- 信号の箱（中の座標は、ゲームの信号の絵と同じ 横222 × 縦84。それを大きくして置く） -->
+      <g transform="translate(10 40) scale(1.1)">
+        <rect x="1.25" y="1.25" width="219.5" height="81.5" rx="26" fill="#868c95" stroke="#5a3d1e" stroke-width="2.5"/>
+        <rect x="7" y="7" width="208" height="70" rx="21" fill="none" stroke="#a6abb3" stroke-width="2"/>
+        <!-- 左：青（消えている。右向きの矢印がうすく見える） -->
+        <circle cx="44" cy="42" r="32" fill="#5d636b"/>
+        <circle cx="44" cy="42" r="27" fill="#2c6a62"/>
+        <path d="M 27 37 L 45 37 L 45 28 L 62 42 L 45 56 L 45 47 L 27 47 Z"
+              fill="#f1fff9" stroke="#bfe6da" stroke-width="1.2" stroke-linejoin="round" opacity="0.28"/>
+        <!-- まん中：黄（消えている） -->
+        <circle cx="111" cy="42" r="32" fill="#5d636b"/>
+        <circle cx="111" cy="42" r="27" fill="#84713a"/>
+        <!-- 右：赤（点いている。手のひらのマーク） -->
+        <circle cx="178" cy="42" r="32" fill="#5d636b"/>
+        <circle cx="178" cy="42" r="46" fill="url(#top8-glowRed)"/>
+        <circle cx="178" cy="42" r="27" fill="#f2584a"/>
+        <g transform="translate(128 -6)" fill="#fff1e0" stroke="#d9a98a" stroke-width="1.2" stroke-linejoin="round">
+          <rect x="41" y="50" width="18" height="16" rx="6"/>
+          <rect x="41" y="34" width="4.8" height="22" rx="2.4"/>
+          <rect x="45.8" y="30" width="4.8" height="26" rx="2.4"/>
+          <rect x="50.6" y="31" width="4.8" height="25" rx="2.4"/>
+          <rect x="55.4" y="35" width="4.4" height="21" rx="2.2"/>
+          <rect x="32.5" y="48" width="5.4" height="14" rx="2.7" transform="rotate(-35 35.2 55)"/>
+        </g>
+      </g>
     </svg>
   </a>
   </div></div>

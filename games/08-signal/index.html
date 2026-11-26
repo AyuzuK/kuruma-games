@@ -15,6 +15,7 @@
        ・大きな横向きの信号（左から 青・黄・赤）をさわると、青 → 黄（1.2秒）→ 赤 → 青 … と変わる
        ・青：くるまが左から右へ走る。赤：停止線の手前でゆっくり止まり、列がだんだん長くなる
        ・青になると、列のくるまが先頭から順に続けて走り出す
+       ・5秒さわらないと、指マークが「次に点く灯」を指す。赤のときは、止まっているくるまも ぷるぷるする
        ・信号の状態（light）と、くるまの走り（cars）は、JavaScript の中でも別々に管理している
        ===================================================== */
 
@@ -475,9 +476,14 @@
       var K = window.Kuruma;
 
       // ===== 設定（数字を変えると動きが変わります。多くは実物で測って合わせる目安） =====
-      // 出てくるくるま8台（図鑑が増えても、このゲームが勝手に変わらないように、ここにはっきり書く）。
-      // 袋に入れてまぜ、8台が1回ずつ出たらまぜ直す。となり合うくるまの色が、できるだけ かぶらない
-      var IDS = ["bus", "fire", "mixer", "garbage", "taxi", "crane", "police", "dump"];
+      // 出てくるくるま24台（図鑑が増えても、このゲームが勝手に変わらないように、ここにはっきり書く）。
+      // 袋に入れてまぜ、24台が1回ずつ出たらまぜ直す。となり合うくるまの色が、できるだけ かぶらない
+      var IDS = [
+        "mixer", "dump", "bulldozer", "garbage", "shovel", "fire",
+        "ambulance", "crane", "police", "grader", "tanker", "tractor",
+        "taxi", "tow", "sports", "roller", "bus", "doubledecker",
+        "loader", "forklift", "wingtruck", "carrier", "mail", "shirobai"
+      ];
       var HOME_URL = "../../index.html";   // トップ画面
       var YELLOW_MS = 1200;      // 黄が点いている時間（ミリ秒）
       var LAUNCH_FIRST = 320;    // 青になってから、止まっている先頭が走り出すまで（ミリ秒）
@@ -488,10 +494,15 @@
       var SPAWN_RED = 2500;      // 赤で、列に次のくるまが来るまでの間（ミリ秒）
       var SPAWN_RED_FIRST = 900; // 赤になって、列がからのとき、最初のくるまが来るまで（ミリ秒）
       var SPAWN_RETRY = 300;     // 前のくるまが近くて、まだ出せないときに、もう一度ためすまで（ミリ秒）
-      var MAX_QUEUE = 8;         // 赤で並ぶ、いちばん多い台数（出てくる車種の数。画面の外で待つぶんも入れる）
+      var MAX_QUEUE = 8;         // 赤で並ぶ、いちばん多い台数（画面の外で待つぶんも入れる。青で走りきる時間が長くならない数）
       var TIRE_LINE = 0.64;      // タイヤの下のはしの高さ（道の下から。CSS の .car と同じ値）
       var TIRE_GAP = 5;          // 絵の中の、タイヤの下の余白（高さ 220 のうち）
-      var CAR_TALL = 210;        // タイヤの下から、絵のいちばん高いところまで（仕事で はしご・うでが上がったときも入る）
+      // タイヤの下から上に、くるまのために空けておく高さ（絵の高さの単位）。
+      // 24台でいちばん高いのは しょべるかーの うでの先（約214）。仕事で はしご・うでが上がっても これより低い。
+      // ぷるぷるで約5上がるので（合わせて約219）、220 にしておく
+      var CAR_TALL = 220;
+      var WOBBLE_MS = 1000;      // 赤で さわらないときの、ぷるぷる1回の長さ（ミリ秒）
+      var WOBBLE_EVERY = 4000;   // ぷるぷるを くり返す間かく（ミリ秒）
       var BOX_GAP = 4;           // 信号の箱と、くるまの上のはしの間（px）
       var BOX_MAX_W = 520;       // 信号の箱の、いちばん大きい横幅（px）
       var BOX_MAX_H = 190;       // 信号の箱の、いちばん大きい高さ（px）
@@ -514,9 +525,14 @@
       // 共通の部品
       var order = K.stage.randomOrder(IDS, function (id) { return K.cars.get(id).color; }, Math.random);
 
-      // 指マーク：最初の1回だけ、信号の赤い丸のあたりを指す。さわったら消して、もう出さない
+      // 指マーク：次に点く灯（青のときは赤、赤のときは青）を指す。
+      // 開いた直後に出る。さわったら消えて、5秒さわらないと、また出る
       var hint = K.touch.createHint();
       document.body.appendChild(hint);
+      var idleTimer = K.touch.hintTimer(onIdle);   // 最後にさわってから5秒を数える
+      var idle = false;          // 5秒さわっていないか
+      var wobbleTimer = null;    // 次のぷるぷるの予約（いつも1つだけ）
+      var wobbleOffTimer = null; // いまのぷるぷるを止める予約
 
       // ===== 状態 =====
       // 信号の状態（light）：green・yellow・red。くるまの走りとは別に管理する
@@ -573,7 +589,7 @@
         stopFront = lineLeft - clamp(6, w * 0.015, 18);          // 停止線の少し手前で止まる
         gapQ = clamp(8, w * 0.025, 28);
         speed = clamp(170, w * 0.32, 300);
-        // 横：いちばん長いくるま（310）の1台と半分より少し多く（480）が、停止線の左に入る大きさ
+        // 横：いちばん長いくるま（しょうぼうしゃなどの 310）の1台と半分より少し多く（480）が、停止線の左に入る大きさ
         var byWidth = (stopFront - gapQ) / 480;
         // 縦：タイヤの下から上へ、くるま → すきま → 信号の箱 → 上の文字 が重ならない大きさ
         var byHeight = (tireY - topLimit - boxMin - BOX_GAP) / CAR_TALL;
@@ -651,15 +667,61 @@
         c.size.style.transform = "scale(" + scale + ")";
       }
 
-      // ===== 指マークの場所：右の赤い丸（上のほう）を、上から指す =====
+      // ===== 指マークの場所：次に点く灯の丸（上のほう）を、上から指す =====
+      //   赤のときは左の青（横 44）、そのほかは右の赤（横 178）。数字は信号の絵の座標
       function placeHint() {
         var r = signalEl.getBoundingClientRect();
-        var tipX = r.left + r.width * (178 / 222);
+        var lampX = (light === "red") ? 44 : 178;
+        var tipX = r.left + r.width * (lampX / 222);
         var tipY = r.top + r.height * (27 / 84);
         var fit = K.touch.hintFit(tipX, tipY, [message, homeBtn, muteBtn]);
         hint.style.setProperty("--hs", fit.scale);
         hint.style.left = (tipX - K.touch.HINT_TIP_X * fit.scale) + "px";
         hint.style.top = (tipY - K.touch.HINT_HEIGHT * fit.scale + fit.drop) + "px";
+      }
+
+      // ===== さわらないときの合図（指マークと、ぷるぷる） =====
+      // 5秒さわらなかったとき。黄のあいだは出さずに、赤になってから出す（goRed で）
+      function onIdle() {
+        idle = true;
+        if (light !== "yellow") showGuide();
+      }
+
+      function showGuide() {
+        placeHint();
+        K.touch.showHint(hint);
+        if (light === "red") wobbleOnce();   // 出た直後に1回目
+      }
+
+      // 指マークと ぷるぷるを、すぐに止める（予約も消す）
+      function clearGuide() {
+        idle = false;
+        K.touch.hideHint(hint);
+        stopWobble();
+      }
+
+      // 止まっていて画面に見えるくるまを、いっしょに約1秒 ぷるぷるさせ、次の回を予約する（音は出さない）。
+      // くるまの箱に .waiting を付け外しするだけ（ゆれ方は共通の CSS。動きを減らす設定では ゆれない）
+      function wobbleOnce() {
+        stopWobble();
+        for (var i = 0; i < queue.length; i++) {
+          var c = queue[i];
+          if (c.arrived && isVisible(c)) c.box.classList.add("waiting");
+        }
+        wobbleOffTimer = setTimeout(removeWaiting, WOBBLE_MS);
+        wobbleTimer = setTimeout(wobbleOnce, WOBBLE_EVERY);
+      }
+
+      function removeWaiting() {
+        for (var id in carById) {
+          if (carById.hasOwnProperty(id)) carById[id].box.classList.remove("waiting");
+        }
+      }
+
+      function stopWobble() {
+        clearTimeout(wobbleTimer);
+        clearTimeout(wobbleOffTimer);
+        removeWaiting();
       }
 
       // ===== くるまを作る・動かす =====
@@ -719,6 +781,7 @@
         // （行き先が前と同じだと、前の動きがそのまま続いて、予約の時間とずれるため）
         if (c.box.classList.contains("moving")) jumpTo(c, curX(c));
         clearTimeout(c.timer);
+        c.box.classList.remove("waiting");       // 走るくるまは、ぷるぷるしない
         c.box.style.transition = "transform " + ms + "ms " + ease;
         c.box.style.transform = "translateX(" + x + "px)";
         c.x = x;
@@ -855,6 +918,7 @@
       function setLight(value) {
         light = value;
         signalEl.setAttribute("data-light", value);
+        if (value !== "red") stopWobble();       // ぷるぷるは赤のときだけ
         updateScene();
       }
 
@@ -884,6 +948,7 @@
         playRedSound();
         settle();
         scheduleSpawn(queue.length ? SPAWN_RED : SPAWN_RED_FIRST);
+        if (idle) showGuide();     // 黄のあいだに5秒がたっていたら、ここで出す
       }
 
       // 赤になったとき：列と、まだ止まれる走行中のくるまを、前から順に止まる場所へ
@@ -1046,7 +1111,6 @@
       // ===== 画面のどこかに指がふれた瞬間 =====
       // （大人用のボタンへのタッチと、2本目からの指は、共通の部品が はぶいてくれる）
       K.touch.onTap(function (e) {
-        K.touch.hideHint(hint);      // さわったので、指マークを消す（もう出さない）
         var carEl = e.target && e.target.closest ? e.target.closest(".car") : null;
         if (carEl) {
           carTap(carById[carEl.getAttribute("data-cid")]);
@@ -1055,20 +1119,27 @@
         toggleLight();
       });
 
-      // 一度でもさわったら（信号・大人用ボタンのどれでも）、くるまの音を鳴らしてよい
+      // 一度でもさわったら（信号・大人用ボタンのどれでも）、くるまの音を鳴らしてよい。
+      // 合図（指マーク・ぷるぷる）は すぐ止めて、5秒を数え直す
+      // （この受け取りは、上の onTap より先に呼ばれる）
       document.addEventListener("pointerdown", function () {
         touched = true;
         K.sound.prepare();   // 音の準備（iPhone・iPad 用）
+        clearGuide();
+        idleTimer.restart();
       }, true);
       // 画面がかくれたら、さわる前の状態にもどす（もどったとき、いきなり音が鳴らないように）
       document.addEventListener("visibilitychange", function () {
         if (document.hidden) {
           touched = false;
+          idleTimer.stop();      // かくれている間は、合図の予約を止める
+          clearGuide();
           return;
         }
         // もどったとき：かくれていた間は、予約と動きの時間がずれることがあるので、重ならないように並べ直す
         rearrangeCars();
         afterCarGone();
+        idleTimer.restart();     // 5秒を数え直す
       });
       // 長押しメニューを出さない
       document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
@@ -1086,9 +1157,10 @@
 
       // ===== 最初の準備：青から始める（最初のくるまが、少しして左から入ってくる） =====
       layout();
-      K.touch.showHint(hint);
+      K.touch.showHint(hint);    // 開いた直後の指マーク
       setLight("green");
       scheduleSpawn(500);
+      idleTimer.restart();
     })();
   </script>
 
